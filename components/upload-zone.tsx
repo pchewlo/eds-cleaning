@@ -41,12 +41,12 @@ export function UploadZone({ files, setFiles, disabled }: Props) {
           if (!disabled) handleFiles(e.dataTransfer.files);
         }}
         onClick={() => !disabled && inputRef.current?.click()}
-        className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors cursor-pointer ${
+        className={`border-2 border-dashed rounded-xl p-8 text-center transition-colors cursor-pointer ${
           disabled
-            ? "border-gray-200 bg-gray-50 cursor-not-allowed"
+            ? "border-slate-200 bg-slate-100/50 cursor-not-allowed"
             : dragOver
-            ? "border-blue-400 bg-blue-50"
-            : "border-gray-300 hover:border-gray-400"
+            ? "border-slate-400 bg-slate-100"
+            : "border-slate-300 hover:border-slate-400 bg-white"
         }`}
       >
         <input
@@ -59,13 +59,13 @@ export function UploadZone({ files, setFiles, disabled }: Props) {
           disabled={disabled}
         />
         {disabled ? (
-          <p className="text-gray-400">Select a job first</p>
+          <p className="text-slate-400 text-sm">Select a job first</p>
         ) : (
           <div>
-            <p className="text-gray-600 font-medium">
+            <p className="text-slate-600 font-medium text-sm">
               Drop CVs here or click to browse
             </p>
-            <p className="text-xs text-gray-400 mt-1">
+            <p className="text-xs text-slate-400 mt-1">
               PDF, DOCX, TXT, or CSV files
             </p>
           </div>
@@ -77,12 +77,15 @@ export function UploadZone({ files, setFiles, disabled }: Props) {
           {files.map((file, i) => (
             <span
               key={`${file.name}-${i}`}
-              className="inline-flex items-center gap-1 px-3 py-1 bg-gray-100 rounded-full text-sm"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs text-slate-700 shadow-sm"
             >
               {file.name}
               <button
-                onClick={() => removeFile(i)}
-                className="ml-1 text-gray-400 hover:text-red-500"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  removeFile(i);
+                }}
+                className="ml-0.5 text-slate-400 hover:text-red-500 transition-colors"
               >
                 &times;
               </button>

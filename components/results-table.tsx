@@ -57,33 +57,52 @@ function exportCSV(data: ScoreResponse) {
 
 export function ResultsTable({ data }: Props) {
   return (
-    <div>
-      <div className="flex items-center justify-between mb-4">
-        <h2 className="text-lg font-semibold">
-          Results — {data.results.length} candidates ranked
-        </h2>
+    <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+      {/* Header bar */}
+      <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 bg-slate-50/50">
+        <div>
+          <h2 className="text-base font-semibold text-slate-900">
+            Results
+          </h2>
+          <p className="text-xs text-slate-500 mt-0.5">
+            {data.results.length} candidate{data.results.length !== 1 ? "s" : ""} ranked
+          </p>
+        </div>
         <button
           onClick={() => exportCSV(data)}
-          className="px-3 py-1.5 text-sm bg-gray-100 hover:bg-gray-200 rounded-lg"
+          className="px-3.5 py-1.5 text-xs font-medium text-slate-700 bg-white border border-slate-200 hover:bg-slate-50 hover:border-slate-300 rounded-lg transition-colors shadow-sm"
         >
           Export CSV
         </button>
       </div>
 
-      <div className="overflow-x-auto border rounded-lg">
+      {/* Table */}
+      <div className="overflow-x-auto">
         <table className="w-full text-sm">
-          <thead className="bg-gray-100">
-            <tr>
-              <th className="px-3 py-2 text-left">#</th>
-              <th className="px-3 py-2 text-left">Name</th>
-              <th className="px-3 py-2 text-left">Score</th>
-              <th className="px-3 py-2 text-left">Rec</th>
-              <th className="px-3 py-2 text-left">Commute</th>
-              <th className="px-3 py-2 text-left">Flags</th>
-              <th className="px-3 py-2"></th>
+          <thead>
+            <tr className="border-b border-slate-100">
+              <th className="px-6 py-3 text-left text-[11px] font-semibold text-slate-500 uppercase tracking-wider w-12">
+                #
+              </th>
+              <th className="px-6 py-3 text-left text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
+                Candidate
+              </th>
+              <th className="px-6 py-3 text-left text-[11px] font-semibold text-slate-500 uppercase tracking-wider w-32">
+                Score
+              </th>
+              <th className="px-6 py-3 text-left text-[11px] font-semibold text-slate-500 uppercase tracking-wider w-28">
+                Recommendation
+              </th>
+              <th className="px-6 py-3 text-left text-[11px] font-semibold text-slate-500 uppercase tracking-wider w-24">
+                Commute
+              </th>
+              <th className="px-6 py-3 text-left text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
+                Flags
+              </th>
+              <th className="px-4 py-3 w-8" />
             </tr>
           </thead>
-          <tbody>
+          <tbody className="divide-y divide-slate-100">
             {data.results.map((candidate, i) => (
               <CandidateRow
                 key={candidate.filename}
@@ -95,15 +114,16 @@ export function ResultsTable({ data }: Props) {
         </table>
       </div>
 
+      {/* Errors */}
       {data.errors.length > 0 && (
-        <div className="mt-4 p-3 bg-red-50 rounded-lg">
+        <div className="mx-6 my-4 p-4 bg-red-50 border border-red-200 rounded-xl">
           <h3 className="font-medium text-red-800 text-sm mb-2">
-            Errors ({data.errors.length} files could not be scored)
+            Errors ({data.errors.length} file{data.errors.length !== 1 ? "s" : ""} could not be scored)
           </h3>
           <ul className="text-xs text-red-700 space-y-1">
             {data.errors.map((e, i) => (
               <li key={i}>
-                {e.filename}: {e.error}
+                <span className="font-medium">{e.filename}:</span> {e.error}
               </li>
             ))}
           </ul>

@@ -14,8 +14,9 @@ export function ExclusionTextarea({ value, onChange }: Props) {
     <div>
       <button
         onClick={() => setOpen(!open)}
-        className="text-sm text-gray-500 hover:text-gray-700 underline"
+        className="text-xs font-medium text-slate-500 hover:text-slate-700 transition-colors flex items-center gap-1.5"
       >
+        <span className="text-[10px]">{open ? "\u25BC" : "\u25B6"}</span>
         {open ? "Hide" : "Show"} exclusion list
       </button>
       {open && (
@@ -23,7 +24,7 @@ export function ExclusionTextarea({ value, onChange }: Props) {
           value={value}
           onChange={(e) => onChange(e.target.value)}
           placeholder="Paste names or emails to exclude (one per line)"
-          className="mt-2 w-full h-24 p-3 border border-gray-300 rounded-lg text-sm resize-y focus:outline-none focus:ring-2 focus:ring-blue-300"
+          className="mt-3 w-full h-24 p-3 border border-slate-200 rounded-xl text-sm text-slate-700 placeholder:text-slate-400 resize-y bg-white focus:outline-none focus:ring-2 focus:ring-slate-300 focus:border-slate-300 transition-shadow"
         />
       )}
     </div>

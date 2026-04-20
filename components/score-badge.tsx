@@ -4,18 +4,24 @@ interface Props {
   recommendation: "strong" | "consider" | "reject";
 }
 
-const colors = {
-  strong: "bg-green-100 text-green-800",
-  consider: "bg-amber-100 text-amber-800",
-  reject: "bg-red-100 text-red-800",
+const styles = {
+  strong: "bg-emerald-50 text-emerald-700 border-emerald-200",
+  consider: "bg-amber-50 text-amber-700 border-amber-200",
+  reject: "bg-red-50 text-red-700 border-red-200",
+};
+
+const labels = {
+  strong: "Strong",
+  consider: "Consider",
+  reject: "Reject",
 };
 
 export function ScoreBadge({ recommendation }: Props) {
   return (
     <span
-      className={`px-2 py-0.5 rounded-full text-xs font-medium capitalize ${colors[recommendation]}`}
+      className={`inline-flex items-center px-2.5 py-1 rounded-md text-xs font-semibold border ${styles[recommendation]}`}
     >
-      {recommendation}
+      {labels[recommendation]}
     </span>
   );
 }

@@ -15,8 +15,8 @@ export default function Home() {
   const [files, setFiles] = useState<File[]>([]);
   const [excludeList, setExcludeList] = useState("");
   const [scoring, setScoring] = useState(false);
-  const [progress, setProgress] = useState("");
   const [results, setResults] = useState<ScoreResponse | null>(null);
+  const [totalCandidates, setTotalCandidates] = useState(0);
 
   useEffect(() => {
     fetch("/api/jobs")
@@ -37,9 +37,7 @@ export default function Home() {
 
     setScoring(true);
     setResults(null);
-    setProgress(
-      `Scoring ${files.length} candidate${files.length > 1 ? "s" : ""}...`
-    );
+    setTotalCandidates(files.length);
 
     const formData = new FormData();
     formData.append("jobId", selectedJob.id);
@@ -53,33 +51,40 @@ export default function Home() {
       });
       const data = await res.json();
       if (data.error) {
-        setProgress("");
         alert(data.error);
       } else {
         setResults(data);
-        setProgress("");
       }
     } catch {
-      setProgress("");
       alert("An error occurred. Please try again.");
     } finally {
       setScoring(false);
+      setTotalCandidates(0);
     }
   };
 
   return (
-    <main className="max-w-5xl mx-auto px-4 py-8">
-      <header className="mb-8">
-        <h1 className="text-2xl font-bold">Minster CV Ranker</h1>
-        <p className="text-gray-600 mt-1">
+    <main className="max-w-5xl mx-auto px-6 py-10">
+      {/* Header */}
+      <header className="mb-10">
+        <h1 className="text-2xl font-semibold tracking-tight text-slate-900">
+          Minster CV Ranker
+        </h1>
+        <p className="text-slate-500 mt-1 text-[15px]">
           Select a job, upload CVs, and get ranked candidates in seconds.
         </p>
       </header>
 
-      <section className="mb-6">
-        <h2 className="text-sm font-semibold text-gray-700 uppercase tracking-wide mb-3">
-          1. Select a job
-        </h2>
+      {/* Step 1 */}
+      <section className="mb-8">
+        <div className="flex items-center gap-3 mb-4">
+          <span className="flex items-center justify-center w-6 h-6 rounded-full bg-slate-900 text-white text-xs font-semibold">
+            1
+          </span>
+          <h2 className="text-sm font-semibold text-slate-700 uppercase tracking-wide">
+            Select a job
+          </h2>
+        </div>
         <JobSelector
           jobs={jobs}
           selectedJob={selectedJob}
@@ -89,35 +94,65 @@ export default function Home() {
         />
       </section>
 
-      <section className="mb-6">
-        <h2 className="text-sm font-semibold text-gray-700 uppercase tracking-wide mb-3">
-          2. Upload CVs
-        </h2>
+      {/* Divider */}
+      <div className="border-t border-slate-200 my-8" />
+
+      {/* Step 2 */}
+      <section className="mb-8">
+        <div className="flex items-center gap-3 mb-4">
+          <span className="flex items-center justify-center w-6 h-6 rounded-full bg-slate-900 text-white text-xs font-semibold">
+            2
+          </span>
+          <h2 className="text-sm font-semibold text-slate-700 uppercase tracking-wide">
+            Upload CVs
+          </h2>
+        </div>
         <UploadZone files={files} setFiles={setFiles} disabled={!selectedJob} />
       </section>
 
-      <section className="mb-6">
+      {/* Exclusion */}
+      <section className="mb-8">
         <ExclusionTextarea value={excludeList} onChange={setExcludeList} />
       </section>
 
-      <section className="mb-8">
+      {/* Divider */}
+      <div className="border-t border-slate-200 my-8" />
+
+      {/* Submit */}
+      <section className="mb-10">
         <button
           onClick={handleSubmit}
           disabled={!selectedJob || files.length === 0 || scoring}
-          className="px-6 py-3 bg-blue-600 text-white font-medium rounded-lg disabled:opacity-40 disabled:cursor-not-allowed hover:bg-blue-700 transition-colors"
+          className="px-6 py-2.5 bg-slate-900 text-white text-sm font-medium rounded-lg disabled:opacity-30 disabled:cursor-not-allowed hover:bg-slate-800 transition-colors shadow-sm"
         >
-          {scoring ? "Scoring..." : "Rank candidates"}
+          {scoring ? "Ranking..." : "Rank candidates"}
         </button>
-        {progress && (
-          <p className="mt-2 text-sm text-gray-600 animate-pulse">{progress}</p>
-        )}
       </section>
 
-      {results && (
-        <section>
-          <ResultsTable data={results} />
-        </section>
-      )}
+      {/* Results area */}
+      <section>
+        {scoring && (
+          <div className="rounded-xl border border-slate-200 bg-white p-8 shadow-sm">
+            <div className="flex items-center gap-3">
+              <div className="h-5 w-5 rounded-full border-2 border-slate-300 border-t-slate-700 animate-spin" />
+              <p className="text-sm font-medium text-slate-600 soft-pulse">
+                Ranking {totalCandidates} candidate{totalCandidates !== 1 ? "s" : ""}...
+              </p>
+            </div>
+            <div className="mt-5 space-y-3">
+              {Array.from({ length: Math.min(totalCandidates, 5) }).map((_, i) => (
+                <div key={i} className="flex items-center gap-4">
+                  <div className="skeleton h-4 w-6" />
+                  <div className="skeleton h-4 w-40" />
+                  <div className="skeleton h-4 w-16 ml-auto" />
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {results && !scoring && <ResultsTable data={results} />}
+      </section>
     </main>
   );
 }
