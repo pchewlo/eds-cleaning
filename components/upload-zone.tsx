@@ -16,7 +16,7 @@ export function UploadZone({ files, setFiles, disabled }: Props) {
     (newFiles: FileList | null) => {
       if (!newFiles) return;
       const accepted = Array.from(newFiles).filter((f) =>
-        /\.(pdf|docx?|txt)$/i.test(f.name)
+        /\.(pdf|docx?|txt|csv)$/i.test(f.name)
       );
       setFiles([...files, ...accepted]);
     },
@@ -53,7 +53,7 @@ export function UploadZone({ files, setFiles, disabled }: Props) {
           ref={inputRef}
           type="file"
           multiple
-          accept=".pdf,.doc,.docx,.txt"
+          accept=".pdf,.doc,.docx,.txt,.csv"
           className="hidden"
           onChange={(e) => handleFiles(e.target.files)}
           disabled={disabled}
@@ -66,7 +66,7 @@ export function UploadZone({ files, setFiles, disabled }: Props) {
               Drop CVs here or click to browse
             </p>
             <p className="text-xs text-gray-400 mt-1">
-              PDF, DOCX, or TXT files
+              PDF, DOCX, TXT, or CSV files
             </p>
           </div>
         )}
