@@ -4,12 +4,12 @@ import type { NextRequest } from "next/server";
 import { getJobs, getJobById } from "@/lib/scraper";
 import { extractText } from "@/lib/cv-parser";
 import { parseCsvCandidates } from "@/lib/csv-parser";
-import { scoreCandidate, scoreCsvBatch } from "@/lib/claude";
+import { scoreCandidate } from "@/lib/claude";
+import { scoreCsvCandidateLocally } from "@/lib/csv-scorer";
 import { parseExclusionList, isExcluded } from "@/lib/exclusion-list";
 import { ScoredCandidate, CandidateError } from "@/lib/types";
 
 const MAX_CONCURRENCY = 5;
-const CSV_BATCH_SIZE = 15; // Max candidates per Claude call
 
 async function withConcurrency<T>(
   tasks: (() => Promise<T>)[],
@@ -78,7 +78,7 @@ export async function POST(request: NextRequest) {
     const csvFiles = files.filter((f) => isCsvFile(f.name));
     const cvFiles = files.filter((f) => !isCsvFile(f.name));
 
-    // Process CSV files as batches
+    // Process CSV files algorithmically (instant, no API calls)
     for (const csvFile of csvFiles) {
       try {
         const buffer = Buffer.from(await csvFile.arrayBuffer());
@@ -90,34 +90,21 @@ export async function POST(request: NextRequest) {
           continue;
         }
 
-        // Process in batches to stay within token limits
-        for (let i = 0; i < candidates.length; i += CSV_BATCH_SIZE) {
-          const batch = candidates.slice(i, i + CSV_BATCH_SIZE);
-          try {
-            const scored = await scoreCsvBatch(job, batch);
-            for (let j = 0; j < scored.length; j++) {
-              const candidate = scored[j];
-              const csvCandidate = batch[j];
-              const filename = `${csvFile.name} — ${candidate.candidateName || csvCandidate?.name || `Row ${i + j + 1}`}`;
+        for (const candidate of candidates) {
+          const scored = scoreCsvCandidateLocally(candidate, job);
+          const filename = `${csvFile.name} — ${scored.candidateName || "Unknown"}`;
 
-              if (isExcluded(candidate.candidateName, candidate.candidateEmail, exclusions)) {
-                results.push({
-                  ...candidate,
-                  filename,
-                  overallScore: 0,
-                  recommendation: "reject",
-                  redFlags: [...candidate.redFlags, "On exclusion list"],
-                  summary: "Candidate is on the exclusion list.",
-                });
-              } else {
-                results.push({ ...candidate, filename });
-              }
-            }
-          } catch (e) {
-            errors.push({
-              filename: `${csvFile.name} (rows ${i + 1}-${i + batch.length})`,
-              error: e instanceof Error ? e.message : "Unknown error",
+          if (isExcluded(scored.candidateName, scored.candidateEmail, exclusions)) {
+            results.push({
+              ...scored,
+              filename,
+              overallScore: 0,
+              recommendation: "reject",
+              redFlags: [...scored.redFlags, "On exclusion list"],
+              summary: "Candidate is on the exclusion list.",
             });
+          } else {
+            results.push({ ...scored, filename });
           }
         }
       } catch (e) {
