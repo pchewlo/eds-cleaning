@@ -1,5 +1,6 @@
 import { Job, ScoredCandidate } from "./types";
 import { CsvCandidate } from "./csv-parser";
+import { getDistancesBatch, DistanceResult } from "./distance";
 
 function getQualificationAnswer(candidate: CsvCandidate, keyword: string): string | undefined {
   const q = candidate.qualifications.find(
@@ -16,12 +17,19 @@ function parseMinutes(text: string | undefined): number | null {
 
 function scoreCommute(
   candidate: CsvCandidate,
-  job: Job
-): { score: number; viable: boolean; estimatedMinutes: number | null; hasDriverLicence: boolean; reasoning: string } {
+  job: Job,
+  distance: DistanceResult | null
+): { score: number; viable: boolean; estimatedMinutes: number | null; drivingMinutes: number | null; transitMinutes: number | null; hasDriverLicence: boolean; reasoning: string } {
   const travelTime = getQualificationAnswer(candidate, "travel") || getQualificationAnswer(candidate, "long");
   const hasLicence = getQualificationAnswer(candidate, "driving")?.toLowerCase() === "yes";
   const postcode = getQualificationAnswer(candidate, "postcode") || "";
-  const minutes = parseMinutes(travelTime);
+  const selfReportedMinutes = parseMinutes(travelTime);
+
+  const drivingMinutes = distance?.drivingMinutes ?? null;
+  const transitMinutes = distance?.transitMinutes ?? null;
+
+  // Use Google Maps driving time if available, otherwise self-reported
+  const minutes = drivingMinutes ?? selfReportedMinutes;
 
   let score: number;
   let viable: boolean;
@@ -37,13 +45,31 @@ function scoreCommute(
     viable = false;
   }
 
-  // Boost for having licence (important for mobile/evening roles with no buses)
   if (hasLicence) score = Math.min(100, score + 10);
   else score = Math.max(0, score - 10);
 
-  const reasoning = `${candidate.location} (${postcode || "no postcode"}) → ${job.postcode}. Self-reported: ${travelTime || "not stated"}. ${hasLicence ? "Has" : "No"} driving licence.`;
+  // Build reasoning
+  const parts: string[] = [];
+  parts.push(`${candidate.location} (${postcode || "no postcode"}) → ${job.postcode}`);
+  if (drivingMinutes !== null) {
+    parts.push(`Drive: ${distance!.drivingText}`);
+  }
+  if (transitMinutes !== null) {
+    parts.push(`Public transport: ${distance!.transitText}`);
+  }
+  if (selfReportedMinutes !== null && drivingMinutes !== null) {
+    parts.push(`Self-reported: ${travelTime}`);
+  } else if (selfReportedMinutes !== null) {
+    parts.push(`Self-reported: ${travelTime}`);
+  }
+  parts.push(`${hasLicence ? "Has" : "No"} driving licence`);
 
-  return { score, viable, estimatedMinutes: minutes, hasDriverLicence: hasLicence, reasoning };
+  return {
+    score, viable, estimatedMinutes: minutes,
+    drivingMinutes, transitMinutes,
+    hasDriverLicence: hasLicence,
+    reasoning: parts.join(". ") + ".",
+  };
 }
 
 function scoreExperience(candidate: CsvCandidate): {
@@ -56,7 +82,7 @@ function scoreExperience(candidate: CsvCandidate): {
   const years = yearsStr ? parseInt(yearsStr) || 0 : 0;
   const recentRole = candidate.relevantExperience || "";
 
-  let score = Math.min(100, years * 13); // ~8 years = 100
+  let score = Math.min(100, years * 13);
 
   const cleaningKeywords = ["clean", "janitor", "housekeep", "hygiene", "operative"];
   const isDirectCleaning = cleaningKeywords.some((k) =>
@@ -92,16 +118,40 @@ function scoreExperience(candidate: CsvCandidate): {
   return { score, years, relevantRoles, reasoning };
 }
 
-export function scoreCsvCandidateLocally(
-  candidate: CsvCandidate,
+// Score all CSV candidates, using batch Google Maps lookup
+export async function scoreCsvCandidates(
+  candidates: CsvCandidate[],
   job: Job
+): Promise<ScoredCandidate[]> {
+  // Collect postcodes for batch distance lookup
+  const postcodes = candidates.map(
+    (c) => getQualificationAnswer(c, "postcode") || c.location || ""
+  );
+
+  // Batch Google Maps lookup (falls back to estimates if no API key)
+  let distances: DistanceResult[] | null = null;
+  try {
+    distances = await getDistancesBatch(postcodes, job.postcode);
+  } catch (e) {
+    console.error("Distance lookup failed, using estimates:", e);
+  }
+
+  return candidates.map((candidate, i) => {
+    const distance = distances?.[i] ?? null;
+    return scoreSingleCandidate(candidate, job, distance);
+  });
+}
+
+function scoreSingleCandidate(
+  candidate: CsvCandidate,
+  job: Job,
+  distance: DistanceResult | null
 ): ScoredCandidate {
-  const commute = scoreCommute(candidate, job);
+  const commute = scoreCommute(candidate, job, distance);
   const experience = scoreExperience(candidate);
   const hasLicence = commute.hasDriverLicence;
   const postcode = getQualificationAnswer(candidate, "postcode") || null;
 
-  // Tenure: not available from CSV data
   const tenure = {
     score: 50,
     avgYearsPerRole: 0,
@@ -109,7 +159,6 @@ export function scoreCsvCandidateLocally(
     reasoning: "Full work history not available in CSV export — cannot assess tenure.",
   };
 
-  // Requirements check
   const requirementsMet: ScoredCandidate["requirementsMet"] = [];
   const years = experience.years;
 
@@ -142,7 +191,6 @@ export function scoreCsvCandidateLocally(
     }
   }
 
-  // Red flags
   const redFlags: string[] = [];
   if (!commute.viable) redFlags.push("Commute may be too long");
   if (years < 1) redFlags.push("Less than 1 year cleaning experience");
@@ -153,11 +201,9 @@ export function scoreCsvCandidateLocally(
     redFlags.push(`Recent role (${candidate.relevantExperience}) not cleaning-related`);
   }
 
-  // Requirements score
   const metCount = requirementsMet.filter((r) => r.status === "met").length;
   const reqScore = requirementsMet.length > 0 ? (metCount / requirementsMet.length) * 100 : 50;
 
-  // Overall weighted score: Commute 30%, Experience 30%, Tenure 25%, Requirements 15%
   const overallScore = Math.round(
     commute.score * 0.3 +
     experience.score * 0.3 +
@@ -168,7 +214,6 @@ export function scoreCsvCandidateLocally(
   const recommendation: ScoredCandidate["recommendation"] =
     overallScore >= 75 ? "strong" : overallScore >= 50 ? "consider" : "reject";
 
-  // Build explanation of why this recommendation
   const strengths: string[] = [];
   const weaknesses: string[] = [];
 
@@ -207,6 +252,8 @@ export function scoreCsvCandidateLocally(
     commute: {
       viable: commute.viable,
       estimatedMinutes: commute.estimatedMinutes,
+      drivingMinutes: commute.drivingMinutes,
+      transitMinutes: commute.transitMinutes,
       hasDriverLicence: commute.hasDriverLicence,
       reasoning: commute.reasoning,
     },

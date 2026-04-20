@@ -42,14 +42,24 @@ export function CandidateRow({ candidate, rank }: Props) {
           <ScoreBadge recommendation={candidate.recommendation} />
         </td>
         <td className="px-6 py-4 text-sm text-slate-600">
-          {candidate.commute.estimatedMinutes != null && (
-            <span className="tabular-nums">
-              {candidate.commute.estimatedMinutes} min
-              {candidate.commute.hasDriverLicence ? " \u{1F697}" : ""}
-            </span>
-          )}
+          <div className="space-y-0.5">
+            {candidate.commute.drivingMinutes != null ? (
+              <div className="tabular-nums">
+                {candidate.commute.drivingMinutes} min {candidate.commute.hasDriverLicence ? "🚗" : ""}
+              </div>
+            ) : candidate.commute.estimatedMinutes != null ? (
+              <div className="tabular-nums">
+                ~{candidate.commute.estimatedMinutes} min {candidate.commute.hasDriverLicence ? "🚗" : ""}
+              </div>
+            ) : null}
+            {candidate.commute.transitMinutes != null && (
+              <div className="text-[11px] text-slate-400 tabular-nums">
+                {candidate.commute.transitMinutes} min 🚌
+              </div>
+            )}
+          </div>
           {!candidate.commute.viable && (
-            <span className="text-red-500 text-[11px] ml-1 font-medium">(risky)</span>
+            <span className="text-red-500 text-[11px] font-medium">(risky)</span>
           )}
         </td>
         <td className="px-6 py-4 text-sm text-slate-600">
@@ -97,129 +107,112 @@ export function CandidateRow({ candidate, rank }: Props) {
       {expanded && (
         <tr className="bg-slate-50/50">
           <td colSpan={8} className="px-6 py-5">
-            <div className="max-w-3xl space-y-5 text-sm">
-              {/* Summary */}
-              <p className="text-slate-800 leading-relaxed font-medium">
-                {candidate.summary}
-              </p>
-
-              {/* Detail grid */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {/* Commute */}
-                <div className="bg-white rounded-lg border border-slate-200 p-4">
-                  <h4 className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-2">
-                    Commute
-                  </h4>
-                  <p className="text-slate-600 text-sm leading-relaxed">
-                    {candidate.commute.reasoning}
-                  </p>
-                </div>
-
-                {/* Experience */}
-                <div className="bg-white rounded-lg border border-slate-200 p-4">
-                  <div className="flex items-center justify-between mb-2">
-                    <h4 className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
-                      Experience
-                    </h4>
-                    <span className="text-[11px] font-semibold text-slate-400 tabular-nums">
-                      {candidate.experience.score}/10
-                    </span>
-                  </div>
-                  <p className="text-slate-600 text-sm leading-relaxed">
-                    {candidate.experience.reasoning}
-                  </p>
-                  {candidate.experience.relevantRoles.length > 0 && (
-                    <p className="text-[11px] text-slate-400 mt-2">
-                      Relevant: {candidate.experience.relevantRoles.join(", ")}
-                    </p>
-                  )}
-                </div>
-
-                {/* Tenure */}
-                <div className="bg-white rounded-lg border border-slate-200 p-4">
-                  <div className="flex items-center justify-between mb-2">
-                    <h4 className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
-                      Tenure
-                    </h4>
-                    <span className="text-[11px] font-semibold text-slate-400 tabular-nums">
-                      {candidate.tenure.score}/10
-                    </span>
-                  </div>
-                  <p className="text-slate-600 text-sm leading-relaxed">
-                    {candidate.tenure.reasoning}
-                  </p>
-                  <p className="text-[11px] text-slate-400 mt-2">
-                    Avg {candidate.tenure.avgYearsPerRole} yrs/role &middot;{" "}
-                    {candidate.tenure.rolesInLast5Years} roles in last 5 years
-                  </p>
-                </div>
-
-                {/* Requirements */}
-                {candidate.requirementsMet.length > 0 && (
-                  <div className="bg-white rounded-lg border border-slate-200 p-4">
-                    <h4 className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-2">
-                      Requirements
-                    </h4>
-                    <ul className="space-y-1.5">
-                      {candidate.requirementsMet.map((req, i) => (
-                        <li key={i} className="flex gap-2 text-sm">
-                          <span
-                            className={`font-medium flex-shrink-0 ${
-                              req.status === "met"
-                                ? "text-emerald-600"
-                                : req.status === "not_met"
-                                ? "text-red-500"
-                                : "text-slate-400"
-                            }`}
-                          >
-                            {req.status === "met"
-                              ? "\u2713"
-                              : req.status === "not_met"
-                              ? "\u2717"
-                              : "?"}
-                          </span>
-                          <span className="text-slate-600">
-                            <span className="font-medium">{req.requirement}:</span>{" "}
-                            {req.evidence}
-                          </span>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
+            <div className="max-w-2xl text-sm">
+              {/* Contact details — prominent */}
+              <div className="flex flex-wrap gap-x-6 gap-y-1 mb-4 text-sm">
+                {candidate.candidatePhone && (
+                  <a
+                    href={`tel:${candidate.candidatePhone.replace(/['\s]/g, "")}`}
+                    className="text-slate-900 font-medium hover:underline"
+                  >
+                    {candidate.candidatePhone.replace(/^'/, "")}
+                  </a>
+                )}
+                {candidate.candidateEmail && (
+                  <a
+                    href={`mailto:${candidate.candidateEmail}`}
+                    className="text-slate-600 hover:underline"
+                  >
+                    {candidate.candidateEmail}
+                  </a>
+                )}
+                {candidate.candidatePostcode && (
+                  <span className="text-slate-500">{candidate.candidatePostcode}</span>
                 )}
               </div>
 
-              {/* Red flags */}
-              {candidate.redFlags.length > 0 && (
-                <div className="bg-red-50 border border-red-100 rounded-lg p-4">
-                  <h4 className="text-[11px] font-semibold text-red-700 uppercase tracking-wider mb-2">
-                    Red Flags
-                  </h4>
-                  <ul className="space-y-1">
-                    {candidate.redFlags.map((flag, i) => (
-                      <li key={i} className="text-sm text-red-700 flex items-start gap-2">
-                        <span className="text-red-400 mt-0.5 flex-shrink-0">&bull;</span>
-                        {flag}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
+              {/* Summary */}
+              <p className="text-slate-700 leading-relaxed mb-5">
+                {candidate.summary}
+              </p>
 
-              {/* Contact */}
-              {(candidate.candidatePhone || candidate.candidateEmail) && (
-                <div className="flex flex-wrap gap-4 text-[11px] text-slate-400 pt-1 border-t border-slate-200">
-                  {candidate.candidatePhone && (
-                    <span>Phone: {candidate.candidatePhone}</span>
-                  )}
-                  {candidate.candidateEmail && (
-                    <span>Email: {candidate.candidateEmail}</span>
-                  )}
-                  {candidate.candidatePostcode && (
-                    <span>Postcode: {candidate.candidatePostcode}</span>
-                  )}
+              {/* Details as clean list */}
+              <dl className="space-y-4">
+                <div>
+                  <dt className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1">
+                    Commute
+                  </dt>
+                  <dd className="text-slate-700">{candidate.commute.reasoning}</dd>
                 </div>
-              )}
+
+                <div>
+                  <dt className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1">
+                    Experience ({candidate.experience.yearsOfRelevantWork} yrs)
+                  </dt>
+                  <dd className="text-slate-700">
+                    {candidate.experience.reasoning}
+                    {candidate.experience.relevantRoles.length > 0 && (
+                      <span className="text-slate-500">
+                        {" "}— {candidate.experience.relevantRoles.join(", ")}
+                      </span>
+                    )}
+                  </dd>
+                </div>
+
+                {candidate.tenure.reasoning && (
+                  <div>
+                    <dt className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1">
+                      Tenure
+                    </dt>
+                    <dd className="text-slate-700">{candidate.tenure.reasoning}</dd>
+                  </div>
+                )}
+
+                {candidate.requirementsMet.length > 0 && (
+                  <div>
+                    <dt className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1">
+                      Requirements
+                    </dt>
+                    <dd>
+                      <ul className="space-y-1">
+                        {candidate.requirementsMet.map((req, i) => (
+                          <li key={i} className="flex items-start gap-2 text-slate-700">
+                            <span
+                              className={`flex-shrink-0 font-semibold ${
+                                req.status === "met"
+                                  ? "text-emerald-600"
+                                  : req.status === "not_met"
+                                  ? "text-red-500"
+                                  : "text-slate-400"
+                              }`}
+                            >
+                              {req.status === "met" ? "\u2713" : req.status === "not_met" ? "\u2717" : "?"}
+                            </span>
+                            <span>
+                              {req.requirement} — <span className="text-slate-500">{req.evidence}</span>
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
+                    </dd>
+                  </div>
+                )}
+
+                {candidate.redFlags.length > 0 && (
+                  <div>
+                    <dt className="text-[11px] font-semibold text-red-600 uppercase tracking-wider mb-1">
+                      Red flags
+                    </dt>
+                    <dd>
+                      <ul className="space-y-0.5">
+                        {candidate.redFlags.map((flag, i) => (
+                          <li key={i} className="text-red-700">{flag}</li>
+                        ))}
+                      </ul>
+                    </dd>
+                  </div>
+                )}
+              </dl>
             </div>
           </td>
         </tr>

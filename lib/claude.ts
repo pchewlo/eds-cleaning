@@ -121,6 +121,9 @@ export async function scoreCandidate(
   try {
     const cleaned = text.replace(/^```json?\s*\n?/i, "").replace(/\n?```\s*$/i, "");
     const parsed = JSON.parse(cleaned) as ScoredCandidate;
+    // Ensure new fields have defaults
+    parsed.commute.drivingMinutes = parsed.commute.drivingMinutes ?? null;
+    parsed.commute.transitMinutes = parsed.commute.transitMinutes ?? null;
     return parsed;
   } catch {
     if (retryCount < 1) {

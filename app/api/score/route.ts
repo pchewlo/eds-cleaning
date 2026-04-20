@@ -5,7 +5,7 @@ import { getJobs, getJobById } from "@/lib/scraper";
 import { extractText } from "@/lib/cv-parser";
 import { parseCsvCandidates } from "@/lib/csv-parser";
 import { scoreCandidate } from "@/lib/claude";
-import { scoreCsvCandidateLocally } from "@/lib/csv-scorer";
+import { scoreCsvCandidates } from "@/lib/csv-scorer";
 import { parseExclusionList, isExcluded } from "@/lib/exclusion-list";
 import { ScoredCandidate, CandidateError } from "@/lib/types";
 
@@ -90,21 +90,21 @@ export async function POST(request: NextRequest) {
           continue;
         }
 
-        for (const candidate of candidates) {
-          const scored = scoreCsvCandidateLocally(candidate, job);
-          const filename = `${csvFile.name} — ${scored.candidateName || "Unknown"}`;
+        const scored = await scoreCsvCandidates(candidates, job);
+        for (const candidate of scored) {
+          const filename = `${csvFile.name} — ${candidate.candidateName || "Unknown"}`;
 
-          if (isExcluded(scored.candidateName, scored.candidateEmail, exclusions)) {
+          if (isExcluded(candidate.candidateName, candidate.candidateEmail, exclusions)) {
             results.push({
-              ...scored,
+              ...candidate,
               filename,
               overallScore: 0,
               recommendation: "reject",
-              redFlags: [...scored.redFlags, "On exclusion list"],
+              redFlags: [...candidate.redFlags, "On exclusion list"],
               summary: "Candidate is on the exclusion list.",
             });
           } else {
-            results.push({ ...scored, filename });
+            results.push({ ...candidate, filename });
           }
         }
       } catch (e) {

@@ -23,6 +23,8 @@ export type ScoredCandidate = {
   commute: {
     viable: boolean;
     estimatedMinutes: number | null;
+    drivingMinutes: number | null;
+    transitMinutes: number | null;
     hasDriverLicence: boolean | null;
     reasoning: string;
   };
