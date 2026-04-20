@@ -37,7 +37,19 @@ export default function Home() {
 
     setScoring(true);
     setResults(null);
-    setTotalCandidates(files.length);
+
+    // Count actual candidates (CSV rows vs individual files)
+    let count = 0;
+    for (const f of files) {
+      if (f.name.toLowerCase().endsWith(".csv")) {
+        const text = await f.text();
+        const lines = text.split("\n").filter((l) => l.trim());
+        count += Math.max(0, lines.length - 1); // minus header
+      } else {
+        count += 1;
+      }
+    }
+    setTotalCandidates(count);
 
     const formData = new FormData();
     formData.append("jobId", selectedJob.id);
