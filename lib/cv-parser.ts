@@ -1,4 +1,4 @@
-import { PDFParse } from "pdf-parse";
+import { extractText as extractPdfText } from "unpdf";
 import mammoth from "mammoth";
 
 export async function extractText(
@@ -22,10 +22,8 @@ export async function extractText(
 }
 
 async function extractPdf(buffer: Buffer): Promise<string> {
-  const parser = new PDFParse({ data: new Uint8Array(buffer) });
-  const result = await parser.getText();
-  await parser.destroy();
-  return result.text;
+  const { text } = await extractPdfText(new Uint8Array(buffer));
+  return Array.isArray(text) ? text.join("\n") : text;
 }
 
 async function extractDocx(buffer: Buffer): Promise<string> {
