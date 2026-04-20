@@ -168,9 +168,33 @@ export function scoreCsvCandidateLocally(
   const recommendation: ScoredCandidate["recommendation"] =
     overallScore >= 75 ? "strong" : overallScore >= 50 ? "consider" : "reject";
 
-  const summary = `${years}yr cleaning exp, ${commute.estimatedMinutes || "?"}min commute${hasLicence ? " (drives)" : ""}.${
-    candidate.relevantExperience ? " Recent: " + candidate.relevantExperience + "." : ""
-  }`;
+  // Build explanation of why this recommendation
+  const strengths: string[] = [];
+  const weaknesses: string[] = [];
+
+  if (commute.score >= 80) strengths.push("short commute");
+  else if (commute.score < 50) weaknesses.push("long/uncertain commute");
+
+  if (experience.score >= 70) strengths.push(`${years}yr cleaning exp`);
+  else if (experience.score < 40) weaknesses.push("limited experience");
+
+  if (hasLicence) strengths.push("drives");
+  else weaknesses.push("no licence");
+
+  if (reqScore >= 80) strengths.push("meets requirements");
+  else if (reqScore < 50) weaknesses.push("missing requirements");
+
+  let summary: string;
+  if (recommendation === "strong") {
+    summary = `Strong: ${strengths.join(", ")}.`;
+  } else if (recommendation === "reject") {
+    summary = `Reject: ${weaknesses.join(", ")}.`;
+  } else {
+    const parts: string[] = [];
+    if (strengths.length) parts.push(`Pros: ${strengths.join(", ")}`);
+    if (weaknesses.length) parts.push(`Cons: ${weaknesses.join(", ")}`);
+    summary = parts.join(". ") + ".";
+  }
 
   return {
     filename: "",
