@@ -1,0 +1,131 @@
+import Anthropic from "@anthropic-ai/sdk";
+import { Job, ScoredCandidate } from "./types";
+
+const client = new Anthropic();
+
+const SYSTEM_PROMPT = `You are a recruitment screening assistant for Minster Cleaning, a UK commercial cleaning company. You help area managers quickly triage CV applications for specific open cleaning roles.
+
+Score candidates against the specific job provided using these criteria:
+
+1. COMMUTE VIABILITY — Can they realistically get to the job site for the shift hours?
+   - Use UK postcode geography: adjacent postcodes (same first part, e.g. S40/S41) are usually 10–20 min apart. Different towns can be 30+ mins.
+   - If shift starts before 7am, assume no buses — the candidate needs a car.
+   - Short shifts (2–3 hrs) with long commutes are unattractive; flag if commute > 50% of shift length.
+
+2. RELEVANT EXPERIENCE — What counts as relevant:
+   - Strong: commercial or domestic cleaning, janitorial, housekeeping
+   - Relevant: care work, hospitality, retail, warehouse, kitchen porter, similar hands-on service roles
+   - Weaker: office/professional/admin roles with no physical work component
+   - Count years across all relevant roles in the last 5-10 years.
+
+3. JOB TENURE — Minster strongly prefers people who stay in roles 2+ years.
+   - Calculate average years per role over the last 5 years.
+   - Average under 1.5 years = red flag (job hopper).
+   - 6–12 month stints repeatedly = red flag.
+   - Unexplained multi-year gaps = soft red flag.
+
+4. JOB-SPECIFIC REQUIREMENTS — For any "must have" requirements in the job description, evaluate objectively. If the CV doesn't mention it either way, mark "unclear".
+
+OUTPUT: Return valid JSON only. No preamble, no markdown fencing, no explanation outside the JSON.
+
+Overall score weighting:
+- Commute: 30%
+- Experience: 30%
+- Tenure: 25%
+- Requirements: 15%
+
+Recommendation thresholds:
+- 75-100 = "strong"
+- 50-74 = "consider"
+- 0-49 = "reject"`;
+
+function buildUserPrompt(job: Job, cvText: string): string {
+  const requirementsList =
+    job.requirements.length > 0
+      ? job.requirements.map((r) => `- ${r}`).join("\n")
+      : "None stated";
+
+  return `## Job details
+Title: ${job.title}
+Location: ${job.location}
+Postcode: ${job.postcode}
+Shift pattern: ${job.shiftPattern}
+Hours per week: ${job.hoursPerWeek}
+Hourly rate: ${job.hourlyRate}
+
+## Full job description
+${job.fullDescription}
+
+## Must-have requirements
+${requirementsList}
+
+---
+
+## Candidate CV
+${cvText}
+
+---
+
+Return a JSON object matching this exact schema:
+
+{
+  "candidateName": string,
+  "candidatePostcode": string | null,
+  "candidateEmail": string | null,
+  "candidatePhone": string | null,
+  "overallScore": number,
+  "recommendation": "strong" | "consider" | "reject",
+  "commute": {
+    "viable": boolean,
+    "estimatedMinutes": number | null,
+    "hasDriverLicence": boolean | null,
+    "reasoning": string
+  },
+  "experience": {
+    "score": number,
+    "yearsOfRelevantWork": number,
+    "relevantRoles": string[],
+    "reasoning": string
+  },
+  "tenure": {
+    "score": number,
+    "avgYearsPerRole": number,
+    "rolesInLast5Years": number,
+    "reasoning": string
+  },
+  "requirementsMet": [
+    { "requirement": string, "status": "met" | "not_met" | "unclear", "evidence": string }
+  ],
+  "redFlags": string[],
+  "summary": string
+}`;
+}
+
+export async function scoreCandidate(
+  job: Job,
+  cvText: string,
+  retryCount = 0
+): Promise<ScoredCandidate> {
+  const response = await client.messages.create({
+    model: "claude-sonnet-4-6",
+    max_tokens: 2000,
+    temperature: 0,
+    system: SYSTEM_PROMPT,
+    messages: [{ role: "user", content: buildUserPrompt(job, cvText) }],
+  });
+
+  const text =
+    response.content[0].type === "text" ? response.content[0].text : "";
+
+  try {
+    // Strip any markdown fencing if present
+    const cleaned = text.replace(/^```json?\s*\n?/i, "").replace(/\n?```\s*$/i, "");
+    const parsed = JSON.parse(cleaned) as ScoredCandidate;
+    return parsed;
+  } catch {
+    if (retryCount < 1) {
+      return scoreCandidate(job, cvText, retryCount + 1);
+    }
+    throw new Error(`Failed to parse Claude response as JSON: ${text.slice(0, 200)}`);
+  }
+}
