@@ -65,7 +65,7 @@ function scoreCommute(
   parts.push(`${hasLicence ? "Has" : "No"} driving licence`);
 
   return {
-    score, viable, estimatedMinutes: minutes,
+    score, viable, estimatedMinutes: selfReportedMinutes,
     drivingMinutes, transitMinutes,
     hasDriverLicence: hasLicence,
     reasoning: parts.join(". ") + ".",

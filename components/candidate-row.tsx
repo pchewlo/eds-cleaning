@@ -116,7 +116,7 @@ export function CandidateRow({ candidate, rank }: Props) {
                     </span>
                   </h4>
                   <ul className="space-y-0.5 text-[13px] text-slate-600 pl-3">
-                    {candidate.commute.estimatedMinutes != null && candidate.commute.drivingMinutes != null && (
+                    {candidate.commute.estimatedMinutes != null && (
                       <li className="flex items-center gap-2">
                         <span className="text-slate-400 text-[10px]">•</span>
                         Self-reported: {candidate.commute.estimatedMinutes} min
@@ -125,19 +125,13 @@ export function CandidateRow({ candidate, rank }: Props) {
                     {candidate.commute.drivingMinutes != null && (
                       <li className="flex items-center gap-2">
                         <span className="text-slate-400 text-[10px]">•</span>
-                        Google Drive: {candidate.commute.drivingMinutes} min
+                        Drive: {candidate.commute.drivingMinutes} min
                       </li>
                     )}
                     {candidate.commute.transitMinutes != null && (
                       <li className="flex items-center gap-2">
                         <span className="text-slate-400 text-[10px]">•</span>
-                        Google Public Transport: {candidate.commute.transitMinutes} min
-                      </li>
-                    )}
-                    {candidate.commute.estimatedMinutes != null && candidate.commute.drivingMinutes == null && (
-                      <li className="flex items-center gap-2">
-                        <span className="text-slate-400 text-[10px]">•</span>
-                        Self-reported: {candidate.commute.estimatedMinutes} min
+                        Public transport: {candidate.commute.transitMinutes} min
                       </li>
                     )}
                     <li className="flex items-center gap-2">
