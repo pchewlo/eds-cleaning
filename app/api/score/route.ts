@@ -1,3 +1,5 @@
+export const maxDuration = 60; // Vercel Hobby max is 60s
+
 import type { NextRequest } from "next/server";
 import { getJobs, getJobById } from "@/lib/scraper";
 import { extractText } from "@/lib/cv-parser";
