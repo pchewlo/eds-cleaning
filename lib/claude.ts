@@ -1,5 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { Job, ScoredCandidate } from "./types";
+import { CsvCandidate, candidateToText } from "./csv-parser";
 
 const client = new Anthropic();
 
@@ -118,7 +119,6 @@ export async function scoreCandidate(
     response.content[0].type === "text" ? response.content[0].text : "";
 
   try {
-    // Strip any markdown fencing if present
     const cleaned = text.replace(/^```json?\s*\n?/i, "").replace(/\n?```\s*$/i, "");
     const parsed = JSON.parse(cleaned) as ScoredCandidate;
     return parsed;
@@ -127,5 +127,98 @@ export async function scoreCandidate(
       return scoreCandidate(job, cvText, retryCount + 1);
     }
     throw new Error(`Failed to parse Claude response as JSON: ${text.slice(0, 200)}`);
+  }
+}
+
+export async function scoreCsvBatch(
+  job: Job,
+  candidates: CsvCandidate[],
+  retryCount = 0
+): Promise<ScoredCandidate[]> {
+  const candidateBlocks = candidates
+    .map((c, i) => `### Candidate ${i + 1}\n${candidateToText(c)}`)
+    .join("\n---\n");
+
+  const requirementsList =
+    job.requirements.length > 0
+      ? job.requirements.map((r) => `- ${r}`).join("\n")
+      : "None stated";
+
+  const userPrompt = `## Job details
+Title: ${job.title}
+Location: ${job.location}
+Postcode: ${job.postcode}
+Shift pattern: ${job.shiftPattern}
+Hours per week: ${job.hoursPerWeek}
+Hourly rate: ${job.hourlyRate}
+
+## Full job description
+${job.fullDescription}
+
+## Must-have requirements
+${requirementsList}
+
+---
+
+## Candidates (${candidates.length} total)
+${candidateBlocks}
+
+---
+
+Score ALL ${candidates.length} candidates. Return a JSON array with one object per candidate, in the same order. Each object must match this schema:
+
+{
+  "candidateName": string,
+  "candidatePostcode": string | null,
+  "candidateEmail": string | null,
+  "candidatePhone": string | null,
+  "overallScore": number,
+  "recommendation": "strong" | "consider" | "reject",
+  "commute": {
+    "viable": boolean,
+    "estimatedMinutes": number | null,
+    "hasDriverLicence": boolean | null,
+    "reasoning": string
+  },
+  "experience": {
+    "score": number,
+    "yearsOfRelevantWork": number,
+    "relevantRoles": string[],
+    "reasoning": string
+  },
+  "tenure": {
+    "score": number,
+    "avgYearsPerRole": number,
+    "rolesInLast5Years": number,
+    "reasoning": string
+  },
+  "requirementsMet": [
+    { "requirement": string, "status": "met" | "not_met" | "unclear", "evidence": string }
+  ],
+  "redFlags": string[],
+  "summary": string
+}`;
+
+  // Use higher max_tokens for batch
+  const response = await client.messages.create({
+    model: "claude-sonnet-4-6",
+    max_tokens: 16000,
+    temperature: 0,
+    system: SYSTEM_PROMPT,
+    messages: [{ role: "user", content: userPrompt }],
+  });
+
+  const text =
+    response.content[0].type === "text" ? response.content[0].text : "";
+
+  try {
+    const cleaned = text.replace(/^```json?\s*\n?/i, "").replace(/\n?```\s*$/i, "");
+    const parsed = JSON.parse(cleaned) as ScoredCandidate[];
+    return parsed;
+  } catch {
+    if (retryCount < 1) {
+      return scoreCsvBatch(job, candidates, retryCount + 1);
+    }
+    throw new Error(`Failed to parse batch response as JSON: ${text.slice(0, 300)}`);
   }
 }
