@@ -5,9 +5,9 @@ interface Props {
 }
 
 const styles = {
-  strong: "bg-emerald-50 text-emerald-700 border-emerald-200",
-  consider: "bg-amber-50 text-amber-700 border-amber-200",
-  reject: "bg-red-50 text-red-700 border-red-200",
+  strong: "bg-emerald-100/80 text-emerald-700",
+  consider: "bg-amber-100/80 text-amber-700",
+  reject: "bg-red-100/80 text-red-700",
 };
 
 const labels = {
@@ -19,7 +19,7 @@ const labels = {
 export function ScoreBadge({ recommendation }: Props) {
   return (
     <span
-      className={`inline-flex items-center px-2.5 py-1 rounded-md text-xs font-semibold border ${styles[recommendation]}`}
+      className={`inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium ${styles[recommendation]}`}
     >
       {labels[recommendation]}
     </span>

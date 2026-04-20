@@ -13,10 +13,10 @@ function exportCSV(data: ScoreResponse) {
     "Name",
     "Score",
     "Recommendation",
-    "Commute (min)",
+    "Drive (min)",
+    "Transit (min)",
     "Has Licence",
-    "Experience Score",
-    "Tenure Score",
+    "Experience (yrs)",
     "Red Flags",
     "Summary",
     "Phone",
@@ -29,10 +29,10 @@ function exportCSV(data: ScoreResponse) {
     c.candidateName,
     c.overallScore,
     c.recommendation,
-    c.commute.estimatedMinutes ?? "",
+    c.commute.drivingMinutes ?? c.commute.estimatedMinutes ?? "",
+    c.commute.transitMinutes ?? "",
     c.commute.hasDriverLicence ?? "",
-    c.experience.score,
-    c.tenure.score,
+    c.experience.yearsOfRelevantWork,
     c.redFlags.join("; "),
     c.summary,
     c.candidatePhone ?? "",
@@ -58,19 +58,14 @@ function exportCSV(data: ScoreResponse) {
 export function ResultsTable({ data }: Props) {
   return (
     <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
-      {/* Header bar */}
-      <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 bg-slate-50/50">
-        <div>
-          <h2 className="text-base font-semibold text-slate-900">
-            Results
-          </h2>
-          <p className="text-xs text-slate-500 mt-0.5">
-            {data.results.length} candidate{data.results.length !== 1 ? "s" : ""} ranked
-          </p>
-        </div>
+      {/* Header */}
+      <div className="flex items-center justify-between px-5 py-3 border-b border-slate-200">
+        <span className="text-[13px] font-medium text-slate-900">
+          {data.results.length} candidate{data.results.length !== 1 ? "s" : ""} ranked
+        </span>
         <button
           onClick={() => exportCSV(data)}
-          className="px-3.5 py-1.5 text-xs font-medium text-slate-700 bg-white border border-slate-200 hover:bg-slate-50 hover:border-slate-300 rounded-lg transition-colors shadow-sm"
+          className="px-3 py-1 text-[12px] font-medium text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded transition-colors"
         >
           Export CSV
         </button>
@@ -78,37 +73,37 @@ export function ResultsTable({ data }: Props) {
 
       {/* Table */}
       <div className="overflow-x-auto">
-        <table className="w-full text-sm">
+        <table className="w-full">
           <thead>
-            <tr className="border-b border-slate-100">
-              <th className="px-6 py-3 text-left text-[11px] font-semibold text-slate-500 uppercase tracking-wider w-12">
+            <tr className="border-b border-slate-200 bg-slate-50/50">
+              <th className="pl-5 pr-2 py-2.5 text-left text-[11px] font-medium text-slate-500 w-10">
                 #
               </th>
-              <th className="px-6 py-3 text-left text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
-                Candidate
+              <th className="px-3 py-2.5 text-left text-[11px] font-medium text-slate-500">
+                Name
               </th>
-              <th className="px-6 py-3 text-left text-[11px] font-semibold text-slate-500 uppercase tracking-wider w-32">
+              <th className="px-3 py-2.5 text-left text-[11px] font-medium text-slate-500 w-24">
                 Score
               </th>
-              <th className="px-6 py-3 text-left text-[11px] font-semibold text-slate-500 uppercase tracking-wider w-28">
-                Recommendation
+              <th className="px-3 py-2.5 text-left text-[11px] font-medium text-slate-500 w-28">
+                Rec
               </th>
-              <th className="px-6 py-3 text-left text-[11px] font-semibold text-slate-500 uppercase tracking-wider w-24">
+              <th className="px-3 py-2.5 text-left text-[11px] font-medium text-slate-500 w-20">
                 Commute
               </th>
-              <th className="px-6 py-3 text-left text-[11px] font-semibold text-slate-500 uppercase tracking-wider w-36">
+              <th className="px-3 py-2.5 text-left text-[11px] font-medium text-slate-500 w-36">
                 Phone
               </th>
-              <th className="px-6 py-3 text-left text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
+              <th className="px-3 py-2.5 text-left text-[11px] font-medium text-slate-500">
                 Flags
               </th>
-              <th className="px-4 py-3 w-8" />
+              <th className="pr-4 py-2.5 w-6" />
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
             {data.results.map((candidate, i) => (
               <CandidateRow
-                key={candidate.filename}
+                key={`${candidate.candidateName}-${i}`}
                 candidate={candidate}
                 rank={i + 1}
               />
@@ -119,14 +114,14 @@ export function ResultsTable({ data }: Props) {
 
       {/* Errors */}
       {data.errors.length > 0 && (
-        <div className="mx-6 my-4 p-4 bg-red-50 border border-red-200 rounded-xl">
-          <h3 className="font-medium text-red-800 text-sm mb-2">
-            Errors ({data.errors.length} file{data.errors.length !== 1 ? "s" : ""} could not be scored)
-          </h3>
-          <ul className="text-xs text-red-700 space-y-1">
+        <div className="mx-5 my-4 p-3 bg-red-50 border border-red-200 rounded-lg">
+          <p className="font-medium text-red-800 text-[12px] mb-1">
+            {data.errors.length} file{data.errors.length !== 1 ? "s" : ""} could not be scored
+          </p>
+          <ul className="text-[11px] text-red-700 space-y-0.5">
             {data.errors.map((e, i) => (
               <li key={i}>
-                <span className="font-medium">{e.filename}:</span> {e.error}
+                {e.filename}: {e.error}
               </li>
             ))}
           </ul>

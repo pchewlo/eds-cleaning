@@ -16,58 +16,50 @@ export function CandidateRow({ candidate, rank }: Props) {
     <>
       <tr
         onClick={() => setExpanded(!expanded)}
-        className="cursor-pointer hover:bg-slate-50/80 transition-colors"
+        className="cursor-pointer hover:bg-slate-50/60 transition-colors group"
       >
-        <td className="px-6 py-4 text-center">
-          <span className="text-xs font-semibold text-slate-400">{rank}</span>
+        <td className="pl-5 pr-2 py-3 text-center">
+          <span className="text-[13px] text-slate-400 tabular-nums">{rank}</span>
         </td>
-        <td className="px-6 py-4">
-          <div className="font-medium text-slate-900 text-sm">{candidate.candidateName}</div>
-          <div className="text-[11px] text-slate-400 mt-0.5">{candidate.filename}</div>
+        <td className="px-3 py-3">
+          <span className="font-medium text-[13px] text-slate-900">{candidate.candidateName}</span>
         </td>
-        <td className="px-6 py-4">
-          <div className="flex items-center gap-2.5">
-            <span className="font-semibold text-sm text-slate-900 tabular-nums w-7">
+        <td className="px-3 py-3">
+          <div className="flex items-center gap-2">
+            <span className="text-[13px] font-semibold text-slate-900 tabular-nums">
               {candidate.overallScore}
             </span>
-            <div className="w-16 h-1.5 bg-slate-200 rounded-full overflow-hidden">
+            <div className="w-12 h-1 bg-slate-200 rounded-full overflow-hidden">
               <div
-                className="h-full bg-slate-600 rounded-full transition-all"
+                className="h-full bg-slate-500 rounded-full"
                 style={{ width: `${candidate.overallScore}%` }}
               />
             </div>
           </div>
         </td>
-        <td className="px-6 py-4">
+        <td className="px-3 py-3">
           <ScoreBadge recommendation={candidate.recommendation} />
         </td>
-        <td className="px-6 py-4 text-sm text-slate-600">
-          <div className="space-y-0.5">
+        <td className="px-3 py-3">
+          <div className="text-[13px] text-slate-600 tabular-nums">
             {candidate.commute.drivingMinutes != null ? (
-              <div className="tabular-nums">
-                {candidate.commute.drivingMinutes} min {candidate.commute.hasDriverLicence ? "🚗" : ""}
-              </div>
+              <span>{candidate.commute.drivingMinutes} min</span>
             ) : candidate.commute.estimatedMinutes != null ? (
-              <div className="tabular-nums">
-                ~{candidate.commute.estimatedMinutes} min {candidate.commute.hasDriverLicence ? "🚗" : ""}
-              </div>
-            ) : null}
-            {candidate.commute.transitMinutes != null && (
-              <div className="text-[11px] text-slate-400 tabular-nums">
-                {candidate.commute.transitMinutes} min 🚌
-              </div>
+              <span>~{candidate.commute.estimatedMinutes} min</span>
+            ) : (
+              <span className="text-slate-400">—</span>
+            )}
+            {candidate.commute.hasDriverLicence && (
+              <span className="ml-1 text-slate-400">🚗</span>
             )}
           </div>
-          {!candidate.commute.viable && (
-            <span className="text-red-500 text-[11px] font-medium">(risky)</span>
-          )}
         </td>
-        <td className="px-6 py-4 text-sm text-slate-600">
+        <td className="px-3 py-3">
           {candidate.candidatePhone ? (
             <a
               href={`tel:${candidate.candidatePhone.replace(/['\s]/g, "")}`}
               onClick={(e) => e.stopPropagation()}
-              className="hover:text-slate-900 tabular-nums"
+              className="text-[13px] text-slate-600 hover:text-slate-900 tabular-nums"
             >
               {candidate.candidatePhone.replace(/^'/, "")}
             </a>
@@ -75,26 +67,26 @@ export function CandidateRow({ candidate, rank }: Props) {
             <span className="text-slate-300">—</span>
           )}
         </td>
-        <td className="px-6 py-4">
+        <td className="px-3 py-3">
           <div className="flex flex-wrap gap-1">
             {candidate.redFlags.slice(0, 2).map((flag, i) => (
               <span
                 key={i}
-                className="px-2 py-0.5 bg-red-50 text-red-700 border border-red-100 rounded text-[11px]"
+                className="px-1.5 py-0.5 bg-red-50 text-red-600 rounded text-[11px] leading-tight"
               >
                 {flag}
               </span>
             ))}
             {candidate.redFlags.length > 2 && (
-              <span className="px-2 py-0.5 text-slate-400 text-[11px]">
+              <span className="text-slate-400 text-[11px]">
                 +{candidate.redFlags.length - 2}
               </span>
             )}
           </div>
         </td>
-        <td className="px-4 py-4 text-slate-400">
+        <td className="pr-4 py-3">
           <svg
-            className={`w-4 h-4 transition-transform ${expanded ? "rotate-180" : ""}`}
+            className={`w-3.5 h-3.5 text-slate-400 transition-transform ${expanded ? "rotate-180" : ""}`}
             fill="none"
             viewBox="0 0 24 24"
             stroke="currentColor"
@@ -105,114 +97,147 @@ export function CandidateRow({ candidate, rank }: Props) {
         </td>
       </tr>
       {expanded && (
-        <tr className="bg-slate-50/50">
-          <td colSpan={8} className="px-6 py-5">
-            <div className="max-w-2xl text-sm">
-              {/* Contact details — prominent */}
-              <div className="flex flex-wrap gap-x-6 gap-y-1 mb-4 text-sm">
+        <tr>
+          <td colSpan={8} className="px-5 pb-5 pt-1">
+            <div className="bg-slate-50 rounded-lg border border-slate-200/80 px-5 py-4">
+              {/* Summary */}
+              <p className="text-[13px] text-slate-600 mb-4">
+                {candidate.summary}
+              </p>
+
+              {/* Sections */}
+              <div className="space-y-4">
+                {/* Commute */}
+                <div>
+                  <h4 className="text-[12px] font-semibold text-slate-900 mb-1.5">
+                    Commute
+                    <span className="font-normal text-slate-500 ml-1.5">
+                      {candidate.candidatePostcode || candidate.commute.reasoning.split("(")[1]?.split(")")[0] || ""} → {candidate.candidatePostcode ? "" : ""}{candidate.commute.reasoning.split("→")[1]?.split(".")[0]?.trim() || ""}
+                    </span>
+                  </h4>
+                  <ul className="space-y-0.5 text-[13px] text-slate-600 pl-3">
+                    {candidate.commute.estimatedMinutes != null && candidate.commute.drivingMinutes != null && (
+                      <li className="flex items-center gap-2">
+                        <span className="text-slate-400 text-[10px]">•</span>
+                        Self-reported: {candidate.commute.estimatedMinutes} min
+                      </li>
+                    )}
+                    {candidate.commute.drivingMinutes != null && (
+                      <li className="flex items-center gap-2">
+                        <span className="text-slate-400 text-[10px]">•</span>
+                        Google Drive: {candidate.commute.drivingMinutes} min
+                      </li>
+                    )}
+                    {candidate.commute.transitMinutes != null && (
+                      <li className="flex items-center gap-2">
+                        <span className="text-slate-400 text-[10px]">•</span>
+                        Google Public Transport: {candidate.commute.transitMinutes} min
+                      </li>
+                    )}
+                    {candidate.commute.estimatedMinutes != null && candidate.commute.drivingMinutes == null && (
+                      <li className="flex items-center gap-2">
+                        <span className="text-slate-400 text-[10px]">•</span>
+                        Self-reported: {candidate.commute.estimatedMinutes} min
+                      </li>
+                    )}
+                    <li className="flex items-center gap-2">
+                      <span className="text-slate-400 text-[10px]">•</span>
+                      {candidate.commute.hasDriverLicence ? "Has driving licence" : "No driving licence"}
+                    </li>
+                  </ul>
+                </div>
+
+                {/* Experience */}
+                <div>
+                  <h4 className="text-[12px] font-semibold text-slate-900 mb-1.5">Experience</h4>
+                  <ul className="space-y-0.5 text-[13px] text-slate-600 pl-3">
+                    <li className="flex items-center gap-2">
+                      <span className="text-slate-400 text-[10px]">•</span>
+                      {candidate.experience.yearsOfRelevantWork} years commercial cleaning experience claimed
+                    </li>
+                    {candidate.experience.relevantRoles.length > 0 && (
+                      <li className="flex items-center gap-2">
+                        <span className="text-slate-400 text-[10px]">•</span>
+                        Most recent role: {candidate.experience.relevantRoles[0]}
+                      </li>
+                    )}
+                    {candidate.experience.relevantRoles.length === 0 && candidate.experience.reasoning.includes("Most recent role:") && (
+                      <li className="flex items-center gap-2">
+                        <span className="text-slate-400 text-[10px]">•</span>
+                        {candidate.experience.reasoning.split("Most recent role:")[1]?.split(".")[0]?.trim()
+                          ? `Most recent role: ${candidate.experience.reasoning.split("Most recent role:")[1]?.split(".")[0]?.trim()}`
+                          : ""}
+                      </li>
+                    )}
+                  </ul>
+                </div>
+
+                {/* Requirements */}
+                {candidate.requirementsMet.length > 0 && (
+                  <div>
+                    <h4 className="text-[12px] font-semibold text-slate-900 mb-1.5">Requirements</h4>
+                    <ul className="space-y-0.5 text-[13px] pl-3">
+                      {candidate.requirementsMet.map((req, i) => (
+                        <li key={i} className="flex items-center gap-2">
+                          <span
+                            className={`text-[10px] ${
+                              req.status === "met"
+                                ? "text-emerald-500"
+                                : req.status === "not_met"
+                                ? "text-red-500"
+                                : "text-slate-400"
+                            }`}
+                          >
+                            {req.status === "met" ? "●" : req.status === "not_met" ? "●" : "○"}
+                          </span>
+                          <span className="text-slate-600">
+                            {req.requirement}
+                            <span className="text-slate-400 ml-1">— {req.evidence}</span>
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                {/* Red flags */}
+                {candidate.redFlags.length > 0 && (
+                  <div>
+                    <h4 className="text-[12px] font-semibold text-red-700 mb-1.5">Red flags</h4>
+                    <ul className="space-y-0.5 text-[13px] text-red-600 pl-3">
+                      {candidate.redFlags.map((flag, i) => (
+                        <li key={i} className="flex items-center gap-2">
+                          <span className="text-red-400 text-[10px]">•</span>
+                          {flag}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
+
+              {/* Contact footer */}
+              <div className="mt-4 pt-3 border-t border-slate-200/80 flex flex-wrap gap-x-5 gap-y-1 text-[12px]">
                 {candidate.candidatePhone && (
                   <a
                     href={`tel:${candidate.candidatePhone.replace(/['\s]/g, "")}`}
-                    className="text-slate-900 font-medium hover:underline"
+                    className="text-slate-700 hover:text-slate-900"
                   >
-                    {candidate.candidatePhone.replace(/^'/, "")}
+                    📞 {candidate.candidatePhone.replace(/^'/, "")}
                   </a>
                 )}
                 {candidate.candidateEmail && (
                   <a
                     href={`mailto:${candidate.candidateEmail}`}
-                    className="text-slate-600 hover:underline"
+                    className="text-slate-500 hover:text-slate-700"
                   >
-                    {candidate.candidateEmail}
+                    ✉️ {candidate.candidateEmail}
                   </a>
                 )}
                 {candidate.candidatePostcode && (
-                  <span className="text-slate-500">{candidate.candidatePostcode}</span>
+                  <span className="text-slate-500">📍 {candidate.candidatePostcode}</span>
                 )}
               </div>
-
-              {/* Summary */}
-              <p className="text-slate-700 leading-relaxed mb-5">
-                {candidate.summary}
-              </p>
-
-              {/* Details as clean list */}
-              <dl className="space-y-4">
-                <div>
-                  <dt className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1">
-                    Commute
-                  </dt>
-                  <dd className="text-slate-700">{candidate.commute.reasoning}</dd>
-                </div>
-
-                <div>
-                  <dt className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1">
-                    Experience ({candidate.experience.yearsOfRelevantWork} yrs)
-                  </dt>
-                  <dd className="text-slate-700">
-                    {candidate.experience.reasoning}
-                    {candidate.experience.relevantRoles.length > 0 && (
-                      <span className="text-slate-500">
-                        {" "}— {candidate.experience.relevantRoles.join(", ")}
-                      </span>
-                    )}
-                  </dd>
-                </div>
-
-                {candidate.tenure.reasoning && (
-                  <div>
-                    <dt className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1">
-                      Tenure
-                    </dt>
-                    <dd className="text-slate-700">{candidate.tenure.reasoning}</dd>
-                  </div>
-                )}
-
-                {candidate.requirementsMet.length > 0 && (
-                  <div>
-                    <dt className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1">
-                      Requirements
-                    </dt>
-                    <dd>
-                      <ul className="space-y-1">
-                        {candidate.requirementsMet.map((req, i) => (
-                          <li key={i} className="flex items-start gap-2 text-slate-700">
-                            <span
-                              className={`flex-shrink-0 font-semibold ${
-                                req.status === "met"
-                                  ? "text-emerald-600"
-                                  : req.status === "not_met"
-                                  ? "text-red-500"
-                                  : "text-slate-400"
-                              }`}
-                            >
-                              {req.status === "met" ? "\u2713" : req.status === "not_met" ? "\u2717" : "?"}
-                            </span>
-                            <span>
-                              {req.requirement} — <span className="text-slate-500">{req.evidence}</span>
-                            </span>
-                          </li>
-                        ))}
-                      </ul>
-                    </dd>
-                  </div>
-                )}
-
-                {candidate.redFlags.length > 0 && (
-                  <div>
-                    <dt className="text-[11px] font-semibold text-red-600 uppercase tracking-wider mb-1">
-                      Red flags
-                    </dt>
-                    <dd>
-                      <ul className="space-y-0.5">
-                        {candidate.redFlags.map((flag, i) => (
-                          <li key={i} className="text-red-700">{flag}</li>
-                        ))}
-                      </ul>
-                    </dd>
-                  </div>
-                )}
-              </dl>
             </div>
           </td>
         </tr>
