@@ -52,6 +52,19 @@ export function CandidateRow({ candidate, rank }: Props) {
             <span className="text-red-500 text-[11px] ml-1 font-medium">(risky)</span>
           )}
         </td>
+        <td className="px-6 py-4 text-sm text-slate-600">
+          {candidate.candidatePhone ? (
+            <a
+              href={`tel:${candidate.candidatePhone.replace(/['\s]/g, "")}`}
+              onClick={(e) => e.stopPropagation()}
+              className="hover:text-slate-900 tabular-nums"
+            >
+              {candidate.candidatePhone.replace(/^'/, "")}
+            </a>
+          ) : (
+            <span className="text-slate-300">—</span>
+          )}
+        </td>
         <td className="px-6 py-4">
           <div className="flex flex-wrap gap-1">
             {candidate.redFlags.slice(0, 2).map((flag, i) => (
@@ -83,7 +96,7 @@ export function CandidateRow({ candidate, rank }: Props) {
       </tr>
       {expanded && (
         <tr className="bg-slate-50/50">
-          <td colSpan={7} className="px-6 py-5">
+          <td colSpan={8} className="px-6 py-5">
             <div className="max-w-3xl space-y-5 text-sm">
               {/* Summary */}
               <p className="text-slate-800 leading-relaxed font-medium">

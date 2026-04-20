@@ -96,6 +96,9 @@ export function ResultsTable({ data }: Props) {
               <th className="px-6 py-3 text-left text-[11px] font-semibold text-slate-500 uppercase tracking-wider w-24">
                 Commute
               </th>
+              <th className="px-6 py-3 text-left text-[11px] font-semibold text-slate-500 uppercase tracking-wider w-36">
+                Phone
+              </th>
               <th className="px-6 py-3 text-left text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
                 Flags
               </th>
