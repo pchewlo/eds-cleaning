@@ -24,7 +24,7 @@ function SkeletonCard() {
 export function JobSelector({ jobs, selectedJob, onSelect, loading, error }: Props) {
   if (loading) {
     return (
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 min-h-[260px]">
         {Array.from({ length: 6 }).map((_, i) => (
           <SkeletonCard key={i} />
         ))}
@@ -47,7 +47,7 @@ export function JobSelector({ jobs, selectedJob, onSelect, loading, error }: Pro
   }
 
   return (
-    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 min-h-[260px]">
       {jobs.map((job) => {
         const isSelected = selectedJob?.id === job.id;
         return (
