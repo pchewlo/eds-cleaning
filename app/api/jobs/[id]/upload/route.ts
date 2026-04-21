@@ -144,21 +144,39 @@ export async function POST(
 
   // Insert into DB
   for (const s of scoredResults) {
-    const nameNorm = (s.candidateName || "").toLowerCase().trim();
-    const phoneNorm = (s.candidatePhone || "").replace(/[^0-9+]/g, "");
+    const nameNorm = (s.candidateName || "").toLowerCase().trim().replace(/\s+/g, " ");
+    const phoneNorm = (s.candidatePhone || "").replace(/[^0-9]/g, "");
     const fileHash = createHash("sha256")
       .update(`${nameNorm}:${phoneNorm}:${jobId}`)
       .digest("hex");
 
-    const [existing] = await db
+    // Dedup 1: hash match (name + phone)
+    const [hashMatch] = await db
       .select({ id: candidates.id })
       .from(candidates)
       .where(and(eq(candidates.jobId, jobId), eq(candidates.fileHash, fileHash)))
       .limit(1);
 
-    if (existing) {
+    if (hashMatch) {
       duplicateCount++;
       continue;
+    }
+
+    // Dedup 2: name-only match (catches re-uploads with different phone formatting)
+    if (nameNorm.length > 2) {
+      const existingByName = await db
+        .select({ id: candidates.id, name: candidates.name })
+        .from(candidates)
+        .where(eq(candidates.jobId, jobId));
+
+      const nameMatch = existingByName.find((e) =>
+        (e.name || "").toLowerCase().trim().replace(/\s+/g, " ") === nameNorm
+      );
+
+      if (nameMatch) {
+        duplicateCount++;
+        continue;
+      }
     }
 
     // Find matching PDF for this candidate to store CV data
