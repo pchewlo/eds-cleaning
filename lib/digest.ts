@@ -24,7 +24,7 @@ export async function sendDigestEmail(params: {
 }): Promise<void> {
   const { to, jobTitle, jobLocation, jobId, newCount, duplicateCount, candidates, appUrl } = params;
 
-  const SCORE_THRESHOLD = 7.0; // Only email candidates scoring 7+/10
+  const SCORE_THRESHOLD = 7.5; // Only email candidates scoring 7.5+/10
   const qualified = candidates
     .filter((c) => c.score >= SCORE_THRESHOLD)
     .sort((a, b) => b.score - a.score);

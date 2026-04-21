@@ -162,24 +162,16 @@ function CandidateRow({ candidate: c }: { candidate: Candidate }) {
           {isUnverified ? "N/A" : c.score !== null ? c.score.toFixed(1) : "—"}
         </span>
 
-        {/* Name + reasoning */}
+        {/* Name */}
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2">
-            <span className="font-medium text-[13px] text-slate-900 truncate">
-              {c.name || "Unknown"}
-            </span>
-            {c.digestSent && (
-              <span className="text-[10px] text-emerald-600 flex-shrink-0">✉️ emailed</span>
-            )}
-          </div>
-          {c.reasoning && (
-            <p className="text-[12px] text-slate-500 truncate mt-0.5">{c.reasoning}</p>
-          )}
+          <span className="font-medium text-[13px] text-slate-900 truncate block">
+            {c.name || "Unknown"}
+          </span>
         </div>
 
         {/* Commute */}
         {commuteDisplay && (
-          <span className="flex-shrink-0 text-[12px] text-slate-500 tabular-nums hidden lg:block">
+          <span className="flex-shrink-0 text-[12px] text-slate-500 tabular-nums hidden sm:block">
             {commuteDisplay}
           </span>
         )}
@@ -195,14 +187,12 @@ function CandidateRow({ candidate: c }: { candidate: Candidate }) {
           </a>
         )}
 
-        {/* Flags */}
-        <div className="flex-shrink-0 flex gap-1 hidden md:flex">
-          {c.flags.slice(0, 2).map((f, i) => (
-            <span key={i} className="px-1.5 py-0.5 bg-red-50 text-red-600 rounded text-[10px]">
-              {f}
-            </span>
-          ))}
-        </div>
+        {/* Emailed status */}
+        {c.digestSent && (
+          <span className="flex-shrink-0 px-2 py-0.5 bg-emerald-50 text-emerald-700 rounded text-[10px] font-medium">
+            ✉️ emailed
+          </span>
+        )}
 
         <svg
           className={`w-3.5 h-3.5 text-slate-400 flex-shrink-0 transition-transform ${expanded ? "rotate-180" : ""}`}

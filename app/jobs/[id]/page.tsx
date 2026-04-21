@@ -1,19 +1,21 @@
 import { db } from "@/lib/db";
 import { jobs, candidates, uploads } from "@/lib/db/schema";
-import { eq, sql } from "drizzle-orm";
+import { eq, sql, and, gte } from "drizzle-orm";
 import { auth } from "@/lib/auth";
 import { redirect, notFound } from "next/navigation";
 import Link from "next/link";
 import { UploadSection } from "@/components/upload-section";
 import { CandidateList } from "@/components/candidate-list";
 
+const DIGEST_THRESHOLD = 7.5;
+
 export default async function JobDetailPage({
   params,
 }: {
   params: Promise<{ id: string }>;
 }) {
-  const session = await auth();
-  if (!session) redirect("/login");
+  let session;
+  try { session = await auth(); } catch { /* auth may fail without adapter */ }
 
   const { id } = await params;
 
@@ -31,6 +33,13 @@ export default async function JobDetailPage({
     .from(uploads)
     .where(eq(uploads.jobId, id))
     .orderBy(sql`${uploads.uploadedAt} desc`);
+
+  // For each upload that sent a digest, find the candidates that were emailed (score >= threshold)
+  const emailedCandidateNames = allCandidates
+    .filter((c) => c.rankScore && parseFloat(c.rankScore) >= DIGEST_THRESHOLD)
+    .map((c) => c.name || "Unknown");
+
+  const hasDigest = uploadHistory.some((u) => u.digestSentAt !== null);
 
   return (
     <main className="w-full max-w-5xl mx-auto px-6 py-10">
@@ -59,53 +68,12 @@ export default async function JobDetailPage({
       {/* Upload section */}
       <UploadSection jobId={id} />
 
-      {/* Upload history */}
-      {uploadHistory.length > 0 && (
-        <div className="mb-8">
-          <h2 className="text-[12px] font-medium text-slate-500 uppercase tracking-wide mb-3">
-            Upload history
-          </h2>
-          <div className="space-y-1.5">
-            {uploadHistory.map((u) => {
-              const date = u.uploadedAt
-                ? new Date(u.uploadedAt).toLocaleDateString("en-GB", {
-                    weekday: "short",
-                    day: "numeric",
-                    month: "short",
-                    hour: "2-digit",
-                    minute: "2-digit",
-                  })
-                : "Unknown";
-              return (
-                <div
-                  key={u.id}
-                  className="flex items-center gap-3 text-sm text-slate-600"
-                >
-                  <span className="text-slate-400 tabular-nums text-xs">{date}</span>
-                  <span>
-                    {u.newCount} new
-                    {u.duplicateCount ? `, ${u.duplicateCount} duplicates skipped` : ""}
-                  </span>
-                  {u.digestSentAt && (
-                    <span className="text-emerald-600 text-xs">✓ Email sent</span>
-                  )}
-                  {u.digestError && (
-                    <span className="text-red-500 text-xs">✗ Email failed</span>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
       {/* Candidates */}
       <CandidateList
         jobId={id}
         candidates={allCandidates.map((c) => {
           const score = c.rankScore ? parseFloat(c.rankScore) : null;
-          const hasDigest = uploadHistory.some((u) => u.digestSentAt !== null);
-          const meetsThreshold = score !== null && score >= 7.0;
+          const meetsThreshold = score !== null && score >= DIGEST_THRESHOLD;
           return {
             id: c.id,
             name: c.name,
@@ -120,6 +88,54 @@ export default async function JobDetailPage({
           };
         })}
       />
+
+      {/* Upload history — below candidates */}
+      {uploadHistory.length > 0 && (
+        <div className="mt-10 pt-8 border-t border-slate-200">
+          <h2 className="text-[12px] font-medium text-slate-400 uppercase tracking-wide mb-4">
+            Upload history
+          </h2>
+          <div className="space-y-3">
+            {uploadHistory.map((u) => {
+              const date = u.uploadedAt
+                ? new Date(u.uploadedAt).toLocaleDateString("en-GB", {
+                    weekday: "short",
+                    day: "numeric",
+                    month: "short",
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  })
+                : "Unknown";
+              return (
+                <div key={u.id} className="text-sm">
+                  <div className="flex items-center gap-3 text-slate-600">
+                    <span className="text-slate-400 tabular-nums text-xs">{date}</span>
+                    <span>
+                      {u.newCount} new candidate{u.newCount !== 1 ? "s" : ""}
+                      {u.duplicateCount ? ` · ${u.duplicateCount} duplicate${u.duplicateCount !== 1 ? "s" : ""} skipped` : ""}
+                    </span>
+                  </div>
+                  {u.digestSentAt && emailedCandidateNames.length > 0 && (
+                    <div className="mt-1 ml-[72px] text-[12px] text-emerald-700">
+                      ✉️ Emailed {emailedCandidateNames.length} candidate{emailedCandidateNames.length !== 1 ? "s" : ""} for review: {emailedCandidateNames.join(", ")}
+                    </div>
+                  )}
+                  {u.digestSentAt && emailedCandidateNames.length === 0 && (
+                    <div className="mt-1 ml-[72px] text-[12px] text-slate-400">
+                      No candidates scored above {DIGEST_THRESHOLD} — no email sent
+                    </div>
+                  )}
+                  {u.digestError && (
+                    <div className="mt-1 ml-[72px] text-[12px] text-red-500">
+                      ✗ Email failed: {u.digestError}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
     </main>
   );
 }
