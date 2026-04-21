@@ -44,15 +44,18 @@ export async function syncJobsFromSite(): Promise<void> {
   }
 
   // Archive jobs that are no longer on the site
-  const dbJobs = await db.select({ id: jobs.id }).from(jobs);
-  const scrapedIds = new Set(scrapedJobs.map((j) => j.id));
+  // Only archive if we actually got results — 0 results likely means scrape failed
+  if (scrapedJobs.length > 0) {
+    const dbJobs = await db.select({ id: jobs.id }).from(jobs);
+    const scrapedIds = new Set(scrapedJobs.map((j) => j.id));
 
-  for (const dbJob of dbJobs) {
-    if (!scrapedIds.has(dbJob.id)) {
-      await db
-        .update(jobs)
-        .set({ archivedAt: new Date() })
-        .where(eq(jobs.id, dbJob.id));
+    for (const dbJob of dbJobs) {
+      if (!scrapedIds.has(dbJob.id)) {
+        await db
+          .update(jobs)
+          .set({ archivedAt: new Date() })
+          .where(eq(jobs.id, dbJob.id));
+      }
     }
   }
 }
