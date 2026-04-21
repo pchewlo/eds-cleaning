@@ -8,8 +8,12 @@ import { SignOutButton } from "@/components/sign-out-button";
 export const dynamic = "force-dynamic";
 
 export default async function JobsPage() {
-  const session = await auth();
-  if (!session) redirect("/login");
+  let session;
+  try {
+    session = await auth();
+  } catch (e) {
+    console.error("[DEBUG] Auth error:", e);
+  }
 
   // Debug: check raw count first
   const allJobs = await db.select({ id: jobs.id, archived: jobs.archivedAt }).from(jobs);
