@@ -87,7 +87,7 @@ type ClaudeResult = {
   requirementChecks: Array<{ requirement: string; status: string; evidence: string }>;
 };
 
-const CLAUDE_SYSTEM = `You assess CVs for cleaning roles. Return JSON only, no markdown fencing.
+const CLAUDE_SYSTEM = `You assess CVs for cleaning roles. Return JSON only, no markdown fencing. Be thorough.
 
 Score experience 0-100:
 - Strong: commercial/domestic cleaning, janitorial, housekeeping, domestic assistant, caretaker
@@ -96,7 +96,16 @@ Score experience 0-100:
 - Weaker: office/admin roles
 - IMPORTANT: Long tenure in a single role (5+ years) is very positive. Job hopping (<1.5yr avg) = red flag.
 
-For each candidate return: id, experienceScore (0-100), yearsRelevant, relevantRoles[], experienceReasoning (1 sentence), tenureAvgYears, tenureReasoning (1 sentence), redFlags[], requirementChecks[{requirement, status, evidence}].`;
+For each candidate return:
+- id: the candidate ID string
+- experienceScore: 0-100
+- yearsRelevant: total years of relevant work
+- relevantRoles: array of strings like "In-Store Cleaner, Aldi (2017-2020)" — list EVERY relevant role with employer and dates from the CV
+- experienceReasoning: 2-3 sentences covering what makes them suitable or not
+- tenureAvgYears: average years per role
+- tenureReasoning: 1-2 sentences
+- redFlags: array of warning strings
+- requirementChecks: [{requirement, status: "met"|"not_met"|"unclear", evidence}]`;
 
 // Batch score up to 5 CVs in one Claude call
 async function scoreCvBatchWithClaude(
@@ -110,12 +119,12 @@ async function scoreCvBatchWithClaude(
 
   const response = await client.messages.create({
     model: "claude-sonnet-4-6",
-    max_tokens: 4000,
+    max_tokens: 6000,
     temperature: 0,
     system: CLAUDE_SYSTEM,
     messages: [{
       role: "user",
-      content: `Job: ${jobTitle}\n${jobDescription}\n\n${candidateBlocks}\n\nReturn a JSON array with one object per candidate, same order. Each must have: id, experienceScore, yearsRelevant, relevantRoles, experienceReasoning, tenureAvgYears, tenureReasoning, redFlags, requirementChecks.`,
+      content: `Job: ${jobTitle}\n${jobDescription}\n\n${candidateBlocks}\n\nReturn a JSON array with one object per candidate, same order. For relevantRoles, list EVERY cleaning or relevant role from their CV with employer name and dates (e.g. "In-Store Cleaner, Aldi (2017-2020)"). Be thorough — do not skip roles.`,
     }],
   });
 
