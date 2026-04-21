@@ -130,7 +130,11 @@ export function UploadSection({ jobId }: Props) {
           onDragOver={(e) => { e.preventDefault(); }}
           onDrop={(e) => { e.preventDefault(); handleCvFiles(e.dataTransfer.files); }}
           onClick={() => cvInputRef.current?.click()}
-          className="border-2 border-dashed rounded-xl p-4 text-center cursor-pointer border-slate-200 hover:border-slate-300 bg-white transition-colors"
+          className={`border-2 border-dashed rounded-xl p-4 text-center cursor-pointer transition-colors ${
+            cvFiles.length > 0
+              ? "border-emerald-300 bg-emerald-50"
+              : "border-slate-200 hover:border-slate-300 bg-white"
+          }`}
         >
           <input
             ref={cvInputRef}
@@ -140,8 +144,14 @@ export function UploadSection({ jobId }: Props) {
             className="hidden"
             onChange={(e) => handleCvFiles(e.target.files)}
           />
-          <p className="text-sm text-slate-600">Drop CVs here or click to browse</p>
-          <p className="text-[11px] text-slate-400 mt-0.5">PDF or DOCX files — used to verify experience and tenure</p>
+          {cvFiles.length > 0 ? (
+            <p className="text-sm text-emerald-700">✓ {cvFiles.length} CV{cvFiles.length !== 1 ? "s" : ""} added — click to add more</p>
+          ) : (
+            <>
+              <p className="text-sm text-slate-600">Drop CVs here or click to browse</p>
+              <p className="text-[11px] text-slate-400 mt-0.5">PDF or DOCX files — used to verify experience and tenure</p>
+            </>
+          )}
         </div>
 
         {cvFiles.length > 0 && (
