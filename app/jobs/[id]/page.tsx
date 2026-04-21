@@ -102,17 +102,23 @@ export default async function JobDetailPage({
       {/* Candidates */}
       <CandidateList
         jobId={id}
-        candidates={allCandidates.map((c) => ({
-          id: c.id,
-          name: c.name,
-          email: c.email,
-          phone: c.phone,
-          score: c.rankScore ? parseFloat(c.rankScore) : null,
-          reasoning: c.rankReasoning,
-          flags: (c.rankFlags as string[]) || [],
-          uploadedAt: c.uploadedAt?.toISOString() || null,
-          metadata: c.metadataJson as Record<string, unknown> | null,
-        }))}
+        candidates={allCandidates.map((c) => {
+          const score = c.rankScore ? parseFloat(c.rankScore) : null;
+          const hasDigest = uploadHistory.some((u) => u.digestSentAt !== null);
+          const meetsThreshold = score !== null && score >= 7.0;
+          return {
+            id: c.id,
+            name: c.name,
+            email: c.email,
+            phone: c.phone,
+            score,
+            reasoning: c.rankReasoning,
+            flags: (c.rankFlags as string[]) || [],
+            uploadedAt: c.uploadedAt?.toISOString() || null,
+            metadata: c.metadataJson as Record<string, unknown> | null,
+            digestSent: hasDigest && meetsThreshold,
+          };
+        })}
       />
     </main>
   );

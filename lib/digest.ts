@@ -24,15 +24,16 @@ export async function sendDigestEmail(params: {
 }): Promise<void> {
   const { to, jobTitle, jobLocation, jobId, newCount, duplicateCount, candidates, appUrl } = params;
 
-  const top5 = candidates
-    .sort((a, b) => b.score - a.score)
-    .slice(0, 5);
+  const SCORE_THRESHOLD = 7.0; // Only email candidates scoring 7+/10
+  const qualified = candidates
+    .filter((c) => c.score >= SCORE_THRESHOLD)
+    .sort((a, b) => b.score - a.score);
 
-  if (top5.length === 0) return;
+  if (qualified.length === 0) return; // Don't send email if nobody qualifies
 
   const location = jobLocation ? ` (${jobLocation})` : "";
 
-  const candidateRows = top5
+  const candidateRows = qualified
     .map(
       (c, i) => `
       <tr style="border-bottom: 1px solid #f1f5f9;">
@@ -71,7 +72,7 @@ export async function sendDigestEmail(params: {
       </p>
 
       <h3 style="color: #1e293b; font-size: 14px; font-weight: 600; margin-bottom: 12px;">
-        Top ${top5.length} to call today
+        ${qualified.length} candidate${qualified.length !== 1 ? "s" : ""} scored ${SCORE_THRESHOLD}+ — call today
       </h3>
 
       <table style="width: 100%; border-collapse: collapse;">

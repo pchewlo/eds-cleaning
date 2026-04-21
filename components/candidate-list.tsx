@@ -37,6 +37,7 @@ interface Candidate {
   flags: string[];
   uploadedAt: string | null;
   metadata: Record<string, unknown> | null;
+  digestSent: boolean;
 }
 
 interface Props {
@@ -163,8 +164,13 @@ function CandidateRow({ candidate: c }: { candidate: Candidate }) {
 
         {/* Name + reasoning */}
         <div className="flex-1 min-w-0">
-          <div className="font-medium text-[13px] text-slate-900 truncate">
-            {c.name || "Unknown"}
+          <div className="flex items-center gap-2">
+            <span className="font-medium text-[13px] text-slate-900 truncate">
+              {c.name || "Unknown"}
+            </span>
+            {c.digestSent && (
+              <span className="text-[10px] text-emerald-600 flex-shrink-0">✉️ emailed</span>
+            )}
           </div>
           {c.reasoning && (
             <p className="text-[12px] text-slate-500 truncate mt-0.5">{c.reasoning}</p>
@@ -287,18 +293,12 @@ function CandidateRow({ candidate: c }: { candidate: Candidate }) {
                         {experience.yearsOfRelevantWork} years relevant experience
                       </li>
                     )}
-                    {experience.relevantRoles.length > 0 && (
-                      <li className="flex items-center gap-2">
-                        <span className="text-slate-400 text-[10px]">•</span>
-                        Relevant roles: {experience.relevantRoles.join(", ")}
+                    {experience.relevantRoles.length > 0 && experience.relevantRoles.map((role, i) => (
+                      <li key={i} className="flex items-start gap-2">
+                        <span className="text-slate-400 text-[10px] mt-1">•</span>
+                        <span>{typeof role === 'string' ? role : JSON.stringify(role)}</span>
                       </li>
-                    )}
-                    {experience.reasoning && (
-                      <li className="flex items-center gap-2">
-                        <span className="text-slate-400 text-[10px]">•</span>
-                        {experience.reasoning}
-                      </li>
-                    )}
+                    ))}
                   </ul>
                 </div>
               )}
