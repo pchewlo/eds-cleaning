@@ -71,14 +71,8 @@ export function CandidateList({ candidates, jobId }: Props) {
   const router = useRouter();
 
   const handleDeleteAll = async () => {
-    if (!confirm("Delete all candidates for this job? This cannot be undone.")) return;
     setDeleting(true);
-    try {
-      await fetch(`/api/jobs/${jobId}/candidates`, { method: "DELETE" });
-    } catch (e) {
-      console.error("Delete failed:", e);
-    }
-    setDeleting(false);
+    await fetch(`/api/jobs/${jobId}/candidates`, { method: "DELETE" });
     window.location.reload();
   };
 
