@@ -114,7 +114,9 @@ async function scrapeJobs(): Promise<Job[]> {
   $("a[href*='/job/'], a[href*='/vacancy/'], a[href*='/position/']").each(
     (_, el) => {
       const href = $(el).attr("href");
-      const title = $(el).text().trim();
+      // Extract just the h4 title, not all card text
+      const h4 = $(el).find("h4, h3, h2").first().text().trim();
+      const title = h4 || $(el).text().trim();
       if (href && title && title.length > 5) {
         const fullUrl = href.startsWith("http")
           ? href
@@ -150,7 +152,13 @@ async function scrapeJobs(): Promise<Job[]> {
     try {
       const detail = await scrapeJobDetail(url);
       const postcode = extractPostcode(title) || extractPostcode(detail.fullDescription);
-      const location = title.replace(/\(.*\)/, "").replace(/cleaner,?\s*/i, "").trim();
+      // Try to extract location from detail page, fall back to postcode area
+      const locationFromDetail = detail.fullDescription.match(/(?:Location|Site|Area)[:\s]*([^\n]+)/i);
+      const location = locationFromDetail
+        ? locationFromDetail[1].trim()
+        : postcode
+        ? postcode
+        : title.replace(/\(.*\)/, "").replace(/cleaner,?\s*/i, "").replace(/required,?\s*/i, "").trim();
       const idMatch = url.match(/\/(\d+)/);
 
       jobs.push({
