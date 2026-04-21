@@ -1,24 +1,15 @@
 import { db } from "@/lib/db";
 import { jobs, candidates } from "@/lib/db/schema";
-import { eq, isNull, count, sql } from "drizzle-orm";
+import { isNull, count, sql, eq } from "drizzle-orm";
 import Link from "next/link";
 import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { SignOutButton } from "@/components/sign-out-button";
-import { syncJobsFromSite } from "@/lib/sync-jobs";
-
 export const dynamic = "force-dynamic";
 
 export default async function JobsPage() {
   const session = await auth();
   if (!session) redirect("/login");
-
-  // Sync jobs from Minster careers site
-  try {
-    await syncJobsFromSite();
-  } catch (e) {
-    console.error("Failed to sync jobs from site:", e);
-  }
 
   const jobList = await db
     .select({
