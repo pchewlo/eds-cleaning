@@ -64,13 +64,13 @@ export async function POST(
     ? parseCsvCandidates(Buffer.from(await csvFile.arrayBuffer()).toString("utf-8"))
     : [];
 
-  // Extract text from PDFs
-  const pdfCandidates: Array<{ filename: string; name: string; cvText: string }> = [];
+  // Extract text from PDFs and keep raw data for storage
+  const pdfCandidates: Array<{ filename: string; name: string; cvText: string; base64: string }> = [];
   for (const file of cvFiles) {
     try {
       const buffer = Buffer.from(await file.arrayBuffer());
       const text = await extractText(buffer, file.name);
-      // Extract name from filename: "ResumeJohnSmith.pdf" → "John Smith"
+      const base64 = buffer.toString("base64");
       const nameFromFile = file.name
         .replace(/^Resume/i, "")
         .replace(/\.(pdf|docx?|txt)$/i, "")
@@ -78,7 +78,7 @@ export async function POST(
         .replace(/([A-Z]+)([A-Z][a-z])/g, "$1 $2")
         .trim();
 
-      pdfCandidates.push({ filename: file.name, name: nameFromFile, cvText: text });
+      pdfCandidates.push({ filename: file.name, name: nameFromFile, cvText: text, base64 });
     } catch (e) {
       console.error(`Failed to extract text from ${file.name}:`, e);
     }
@@ -161,12 +161,20 @@ export async function POST(
       continue;
     }
 
+    // Find matching PDF for this candidate to store CV data
+    const matchedPdf = pdfCandidates.find((p) => {
+      const norm = (x: string) => x.toLowerCase().replace(/[^a-z]/g, "");
+      return norm(p.name) === norm(s.candidateName || "");
+    });
+
     await db.insert(candidates).values({
       jobId,
       name: s.candidateName,
       email: s.candidateEmail,
       phone: s.candidatePhone,
-      cvBlobUrl: `scored:${s.source}`,
+      cvBlobUrl: matchedPdf ? `pdf:${matchedPdf.filename}` : `scored:${s.source}`,
+      cvData: matchedPdf?.base64 || null,
+      cvFilename: matchedPdf?.filename || null,
       cvText: null,
       fileHash,
       metadataJson: {

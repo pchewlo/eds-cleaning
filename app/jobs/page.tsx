@@ -48,15 +48,13 @@ export default async function JobsPage() {
           </p>
         </div>
         <div className="flex items-center gap-3">
-          <Link
-            href="/jobs/new"
-            className="px-4 py-2 text-sm text-slate-600 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors"
-          >
-            + Custom job
-          </Link>
           <SignOutButton />
         </div>
       </div>
+
+      <p className="text-[13px] text-slate-400 mb-6">
+        These jobs are pulled automatically from the Minster careers site. Select a role to upload and rank candidates.
+      </p>
 
       {jobList.length === 0 ? (
         <div className="text-center py-16 text-slate-500 text-sm">

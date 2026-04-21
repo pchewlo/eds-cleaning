@@ -38,6 +38,7 @@ interface Candidate {
   uploadedAt: string | null;
   metadata: Record<string, unknown> | null;
   digestSent: boolean;
+  hasCv: boolean;
 }
 
 interface Props {
@@ -219,6 +220,17 @@ function CandidateRow({ candidate: c }: { candidate: Candidate }) {
               )}
               {c.metadata?.postcode != null && (
                 <span className="text-slate-500">📍 {`${c.metadata.postcode}`}</span>
+              )}
+              {c.hasCv && (
+                <a
+                  href={`/api/candidates/${c.id}/cv`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={(e) => e.stopPropagation()}
+                  className="text-blue-600 hover:text-blue-800 font-medium"
+                >
+                  📄 View CV
+                </a>
               )}
             </div>
 

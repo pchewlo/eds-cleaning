@@ -45,6 +45,11 @@ export async function sendDigestEmail(params: {
           ${c.phone ? `<div style="color: #475569; font-size: 13px; margin-top: 4px;">📞 ${c.phone}</div>` : ""}
           ${c.email ? `<div style="color: #475569; font-size: 13px;">✉️ ${c.email}</div>` : ""}
           <div style="color: #64748b; font-size: 13px; margin-top: 6px;">${c.reasoning}</div>
+          <div style="margin-top: 6px;">
+            <a href="${appUrl}/api/candidates/${c.id}/cv" style="color: #2563eb; font-size: 12px; text-decoration: none;">📄 View CV</a>
+            &nbsp;&nbsp;
+            <a href="${appUrl}/jobs/${jobId}" style="color: #64748b; font-size: 12px; text-decoration: none;">View full profile</a>
+          </div>
           ${
             c.flags.length > 0
               ? `<div style="margin-top: 4px;">${c.flags

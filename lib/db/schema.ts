@@ -47,6 +47,8 @@ export const candidates = pgTable(
     email: text("email"),
     phone: text("phone"),
     cvBlobUrl: text("cv_blob_url").notNull(),
+    cvData: text("cv_data"),            // base64 encoded PDF, deleted after 30 days
+    cvFilename: text("cv_filename"),
     cvText: text("cv_text"),
     fileHash: text("file_hash").notNull(),
     metadataJson: jsonb("metadata_json"),

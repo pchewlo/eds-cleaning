@@ -94,9 +94,12 @@ export function UploadSection({ jobId }: Props) {
     <div className="mb-8 space-y-4">
       {/* CSV metadata upload */}
       <div>
-        <h3 className="text-[12px] font-medium text-slate-500 uppercase tracking-wide mb-2">
+        <h3 className="text-[12px] font-medium text-slate-500 uppercase tracking-wide mb-1">
           1. Indeed candidate export (CSV)
         </h3>
+        <p className="text-[12px] text-slate-400 mb-2">
+          Export from Indeed using &quot;Export all&quot;. This provides contact details, postcodes, and screening answers.
+        </p>
         <div
           onClick={() => csvInputRef.current?.click()}
           className={`border-2 border-dashed rounded-xl p-4 text-center cursor-pointer transition-colors ${
@@ -133,9 +136,12 @@ export function UploadSection({ jobId }: Props) {
 
       {/* CV files upload */}
       <div>
-        <h3 className="text-[12px] font-medium text-slate-500 uppercase tracking-wide mb-2">
+        <h3 className="text-[12px] font-medium text-slate-500 uppercase tracking-wide mb-1">
           2. CV files (PDF/DOCX)
         </h3>
+        <p className="text-[12px] text-slate-400 mb-2">
+          Upload the individual CVs downloaded from Indeed. Make sure there&apos;s a CV for each candidate in the CSV above for the most accurate ranking.
+        </p>
         <div
           onDragOver={(e) => { e.preventDefault(); }}
           onDrop={(e) => { e.preventDefault(); handleCvFiles(e.dataTransfer.files); }}

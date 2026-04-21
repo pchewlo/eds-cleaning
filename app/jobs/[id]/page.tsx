@@ -1,6 +1,6 @@
 import { db } from "@/lib/db";
 import { jobs, candidates, uploads } from "@/lib/db/schema";
-import { eq, sql, and, gte } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { auth } from "@/lib/auth";
 import { redirect, notFound } from "next/navigation";
 import Link from "next/link";
@@ -34,35 +34,27 @@ export default async function JobDetailPage({
     .where(eq(uploads.jobId, id))
     .orderBy(sql`${uploads.uploadedAt} desc`);
 
-  // For each upload that sent a digest, find the candidates that were emailed (score >= threshold)
+  const hasDigest = uploadHistory.some((u) => u.digestSentAt !== null);
+
+  // Names of candidates that were emailed (scored above threshold)
   const emailedCandidateNames = allCandidates
     .filter((c) => c.rankScore && parseFloat(c.rankScore) >= DIGEST_THRESHOLD)
     .map((c) => c.name || "Unknown");
 
-  const hasDigest = uploadHistory.some((u) => u.digestSentAt !== null);
-
   return (
     <main className="w-full max-w-5xl mx-auto px-6 py-10">
       {/* Header */}
-      <div className="flex items-start justify-between mb-8">
-        <div>
-          <Link
-            href="/jobs"
-            className="text-sm text-slate-500 hover:text-slate-700 mb-2 inline-block"
-          >
-            ← All jobs
-          </Link>
-          <h1 className="text-xl font-semibold text-slate-900">{job.title}</h1>
-          {job.location && (
-            <p className="text-sm text-slate-500 mt-0.5">{job.location}</p>
-          )}
-        </div>
+      <div className="mb-8">
         <Link
-          href={`/jobs/${id}/edit`}
-          className="text-xs text-slate-500 hover:text-slate-700 px-3 py-1.5 border border-slate-200 rounded-lg"
+          href="/jobs"
+          className="text-sm text-slate-500 hover:text-slate-700 mb-2 inline-block"
         >
-          Edit
+          ← All jobs
         </Link>
+        <h1 className="text-xl font-semibold text-slate-900">{job.title}</h1>
+        {job.location && (
+          <p className="text-sm text-slate-500 mt-0.5">{job.location}</p>
+        )}
       </div>
 
       {/* Upload section */}
@@ -85,6 +77,7 @@ export default async function JobDetailPage({
             uploadedAt: c.uploadedAt?.toISOString() || null,
             metadata: c.metadataJson as Record<string, unknown> | null,
             digestSent: hasDigest && meetsThreshold,
+            hasCv: c.cvData !== null,
           };
         })}
       />
