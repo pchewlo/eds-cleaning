@@ -5,31 +5,17 @@ import { jobs, candidates, uploads } from "@/lib/db/schema";
 import { eq, and } from "drizzle-orm";
 import { extractText } from "@/lib/cv-parser";
 import { parseCsvCandidates } from "@/lib/csv-parser";
+import { scoreCombined } from "@/lib/combined-scorer";
 import { scoreCsvCandidates } from "@/lib/csv-scorer";
-import { scoreCandidate } from "@/lib/claude";
 import { sendDigestEmail } from "@/lib/digest";
 import { createHash } from "crypto";
 import type { Job } from "@/lib/types";
 
-function isCsvFile(name: string): boolean {
-  return name.toLowerCase().endsWith(".csv");
-}
-
-// Build a v1-compatible Job object from the DB job
 function toV1Job(dbJob: { id: string; title: string; location: string | null; description: string }): Job {
-  const postcode = dbJob.location || "";
   return {
-    id: dbJob.id,
-    url: "",
-    title: dbJob.title,
-    postcode,
-    location: dbJob.location || "",
-    hourlyRate: "",
-    hoursPerWeek: 0,
-    shiftPattern: "",
-    shiftType: "unknown",
-    requirements: [],
-    fullDescription: dbJob.description,
+    id: dbJob.id, url: "", title: dbJob.title, postcode: dbJob.location || "",
+    location: dbJob.location || "", hourlyRate: "", hoursPerWeek: 0,
+    shiftPattern: "", shiftType: "unknown", requirements: [], fullDescription: dbJob.description,
   };
 }
 
@@ -43,134 +29,151 @@ export async function POST(
   if (!job) return Response.json({ error: "Job not found" }, { status: 404 });
 
   const formData = await request.formData();
-  const files: File[] = [];
+
+  // Get CSV file (single)
+  const csvFile = formData.get("csv") as File | null;
+
+  // Get CV files (multiple)
+  const cvFiles: File[] = [];
   for (const [key, value] of formData.entries()) {
+    if (key === "cvs" && value instanceof File) {
+      cvFiles.push(value);
+    }
+    // Backwards compat: also accept "files" key
     if (key === "files" && value instanceof File) {
-      files.push(value);
+      if (value.name.toLowerCase().endsWith(".csv")) {
+        // treat as CSV
+      } else {
+        cvFiles.push(value);
+      }
     }
   }
 
-  if (files.length === 0) {
+  if (!csvFile && cvFiles.length === 0) {
     return Response.json({ error: "No files uploaded" }, { status: 400 });
   }
 
   let newCount = 0;
   let duplicateCount = 0;
 
-  const csvFiles = files.filter((f) => isCsvFile(f.name));
-  const cvFiles = files.filter((f) => !isCsvFile(f.name));
+  // Parse CSV if provided
+  const csvCandidates = csvFile
+    ? parseCsvCandidates(Buffer.from(await csvFile.arrayBuffer()).toString("utf-8"))
+    : [];
 
-  // Process CSV files using the v1 detailed scorer
-  for (const csvFile of csvFiles) {
-    try {
-      const buffer = Buffer.from(await csvFile.arrayBuffer());
-      const text = buffer.toString("utf-8");
-      const csvCandidates = parseCsvCandidates(text);
-
-      if (csvCandidates.length === 0) continue;
-
-      const v1Job = toV1Job(job);
-      const scored = await scoreCsvCandidates(csvCandidates, v1Job);
-
-      for (const s of scored) {
-        // Dedup by name+phone within this job
-        const nameNorm = (s.candidateName || "").toLowerCase().trim();
-        const phoneNorm = (s.candidatePhone || "").replace(/[^0-9+]/g, "");
-        const fileHash = createHash("sha256")
-          .update(`${nameNorm}:${phoneNorm}:${jobId}`)
-          .digest("hex");
-
-        const [existing] = await db
-          .select({ id: candidates.id })
-          .from(candidates)
-          .where(and(eq(candidates.jobId, jobId), eq(candidates.fileHash, fileHash)))
-          .limit(1);
-
-        if (existing) {
-          duplicateCount++;
-          continue;
-        }
-
-        await db.insert(candidates).values({
-          jobId,
-          name: s.candidateName,
-          email: s.candidateEmail,
-          phone: s.candidatePhone,
-          cvBlobUrl: `csv:${csvFile.name}`,
-          cvText: null,
-          fileHash,
-          metadataJson: {
-            commute: s.commute,
-            experience: s.experience,
-            requirementsMet: s.requirementsMet,
-            redFlags: s.redFlags,
-            postcode: s.candidatePostcode,
-          },
-          rankScore: String(s.overallScore / 10), // Convert 0-100 to 0-10
-          rankReasoning: s.summary,
-          rankFlags: s.redFlags,
-          rankedAt: new Date(),
-        });
-
-        newCount++;
-      }
-    } catch (e) {
-      console.error(`CSV processing failed for ${csvFile.name}:`, e);
-    }
-  }
-
-  // Process individual CV files (PDF/DOCX/TXT) with Claude
+  // Extract text from PDFs
+  const pdfCandidates: Array<{ filename: string; name: string; cvText: string }> = [];
   for (const file of cvFiles) {
     try {
       const buffer = Buffer.from(await file.arrayBuffer());
-      const fileHash = createHash("sha256").update(buffer).digest("hex");
+      const text = await extractText(buffer, file.name);
+      // Extract name from filename: "ResumeJohnSmith.pdf" → "John Smith"
+      const nameFromFile = file.name
+        .replace(/^Resume/i, "")
+        .replace(/\.(pdf|docx?|txt)$/i, "")
+        .replace(/([a-z])([A-Z])/g, "$1 $2")
+        .replace(/([A-Z]+)([A-Z][a-z])/g, "$1 $2")
+        .trim();
 
-      const [existing] = await db
-        .select({ id: candidates.id })
-        .from(candidates)
-        .where(and(eq(candidates.jobId, jobId), eq(candidates.fileHash, fileHash)))
-        .limit(1);
-
-      if (existing) {
-        duplicateCount++;
-        continue;
-      }
-
-      let cvText = "";
-      try {
-        cvText = await extractText(buffer, file.name);
-      } catch {
-        cvText = "";
-      }
-
-      const v1Job = toV1Job(job);
-      const scored = await scoreCandidate(v1Job, cvText);
-
-      await db.insert(candidates).values({
-        jobId,
-        name: scored.candidateName,
-        email: scored.candidateEmail,
-        phone: scored.candidatePhone,
-        cvBlobUrl: `file:${file.name}`,
-        cvText,
-        fileHash,
-        metadataJson: {
-          commute: scored.commute,
-          experience: scored.experience,
-          requirementsMet: scored.requirementsMet,
-          redFlags: scored.redFlags,
-          postcode: scored.candidatePostcode,
-        },
-        rankScore: String(scored.overallScore / 10),
-        rankReasoning: scored.summary,
-        rankFlags: scored.redFlags,
-        rankedAt: new Date(),
-      });
-
-      newCount++;
+      pdfCandidates.push({ filename: file.name, name: nameFromFile, cvText: text });
     } catch (e) {
-      console.error(`CV processing failed for ${file.name}:`, e);
+      console.error(`Failed to extract text from ${file.name}:`, e);
     }
+  }
+
+  // Score based on what we have
+  let scoredResults;
+
+  if (csvCandidates.length > 0 && pdfCandidates.length > 0) {
+    // Combined scoring — best accuracy
+    scoredResults = await scoreCombined({
+      csvCandidates,
+      pdfCandidates,
+      jobTitle: job.title,
+      jobDescription: job.description,
+      jobPostcode: job.location || "",
+      requirements: [],
+    });
+  } else if (csvCandidates.length > 0) {
+    // CSV only — algorithmic scoring
+    const v1Job = toV1Job(job);
+    const csvScored = await scoreCsvCandidates(csvCandidates, v1Job);
+    scoredResults = csvScored.map((s) => ({
+      candidateName: s.candidateName,
+      candidateEmail: s.candidateEmail,
+      candidatePhone: s.candidatePhone,
+      candidatePostcode: s.candidatePostcode,
+      overallScore: s.overallScore,
+      recommendation: s.recommendation,
+      commute: s.commute,
+      experience: {
+        score: s.experience.score,
+        yearsFromCv: 0,
+        yearsFromIndeed: s.experience.yearsOfRelevantWork,
+        relevantRoles: s.experience.relevantRoles,
+        reasoning: s.experience.reasoning,
+      },
+      tenure: { avgYearsPerRole: 0, reasoning: "No CV available" },
+      requirementsMet: s.requirementsMet,
+      redFlags: s.redFlags,
+      summary: s.summary + " (CSV only)",
+      source: "csv_only" as const,
+    }));
+  } else {
+    // PDFs only — Claude scoring without metadata
+    scoredResults = await scoreCombined({
+      csvCandidates: [],
+      pdfCandidates,
+      jobTitle: job.title,
+      jobDescription: job.description,
+      jobPostcode: job.location || "",
+      requirements: [],
+    });
+  }
+
+  // Insert into DB
+  for (const s of scoredResults) {
+    const nameNorm = (s.candidateName || "").toLowerCase().trim();
+    const phoneNorm = (s.candidatePhone || "").replace(/[^0-9+]/g, "");
+    const fileHash = createHash("sha256")
+      .update(`${nameNorm}:${phoneNorm}:${jobId}`)
+      .digest("hex");
+
+    const [existing] = await db
+      .select({ id: candidates.id })
+      .from(candidates)
+      .where(and(eq(candidates.jobId, jobId), eq(candidates.fileHash, fileHash)))
+      .limit(1);
+
+    if (existing) {
+      duplicateCount++;
+      continue;
+    }
+
+    await db.insert(candidates).values({
+      jobId,
+      name: s.candidateName,
+      email: s.candidateEmail,
+      phone: s.candidatePhone,
+      cvBlobUrl: `scored:${s.source}`,
+      cvText: null,
+      fileHash,
+      metadataJson: {
+        commute: s.commute,
+        experience: s.experience,
+        tenure: s.tenure,
+        requirementsMet: s.requirementsMet,
+        redFlags: s.redFlags,
+        postcode: s.candidatePostcode,
+        source: s.source,
+      },
+      rankScore: String(s.overallScore / 10),
+      rankReasoning: s.summary,
+      rankFlags: s.redFlags,
+      rankedAt: new Date(),
+    });
+
+    newCount++;
   }
 
   // Create upload record
@@ -182,51 +185,29 @@ export async function POST(
   // Send digest email
   if (newCount > 0) {
     try {
-      const allCandidates = await db
-        .select()
-        .from(candidates)
-        .where(eq(candidates.jobId, jobId));
-
+      const allCandidates = await db.select().from(candidates).where(eq(candidates.jobId, jobId));
       const ranked = allCandidates
         .filter((c) => c.rankScore !== null)
         .map((c) => ({
-          id: c.id,
-          name: c.name,
-          phone: c.phone,
-          email: c.email,
+          id: c.id, name: c.name, phone: c.phone, email: c.email,
           score: parseFloat(c.rankScore || "0"),
           reasoning: c.rankReasoning || "",
           flags: (c.rankFlags as string[]) || [],
         }));
 
       const appUrl = process.env.AUTH_URL || `https://${process.env.VERCEL_URL || "localhost:3000"}`;
-
       await sendDigestEmail({
-        to: job.recipientEmail,
-        jobTitle: job.title,
-        jobLocation: job.location,
-        jobId: job.id,
-        newCount,
-        duplicateCount,
-        candidates: ranked,
-        appUrl,
+        to: job.recipientEmail, jobTitle: job.title, jobLocation: job.location,
+        jobId: job.id, newCount, duplicateCount, candidates: ranked, appUrl,
       });
-
       await db.update(uploads).set({ digestSentAt: new Date() }).where(eq(uploads.id, upload.id));
     } catch (e) {
       console.error("Digest email failed:", e);
-      await db
-        .update(uploads)
-        .set({ digestError: e instanceof Error ? e.message : "Unknown" })
-        .where(eq(uploads.id, upload.id));
+      await db.update(uploads).set({ digestError: e instanceof Error ? e.message : "Unknown" }).where(eq(uploads.id, upload.id));
     }
   }
 
-  // Return all candidates
-  const allCandidates = await db
-    .select()
-    .from(candidates)
-    .where(eq(candidates.jobId, jobId));
+  const allCandidates = await db.select().from(candidates).where(eq(candidates.jobId, jobId));
 
   return Response.json({
     newCount,
