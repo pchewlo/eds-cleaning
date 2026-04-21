@@ -44,7 +44,7 @@ export default async function JobsPage() {
             Minster CV Triage
           </h1>
           <p className="text-sm text-slate-500 mt-0.5">
-            {jobList.length} active role{jobList.length !== 1 ? "s" : ""} · {session.user?.email}
+            {jobList.length} active role{jobList.length !== 1 ? "s" : ""}{session?.user?.email ? ` · ${session.user.email}` : ""}
           </p>
         </div>
         <div className="flex items-center gap-3">
