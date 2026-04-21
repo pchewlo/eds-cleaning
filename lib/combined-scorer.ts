@@ -75,12 +75,8 @@ function matchPdfToCsv(
   return null;
 }
 
-// Score experience and tenure from the actual CV text using Claude
-async function scoreCvWithClaude(
-  cvText: string,
-  jobTitle: string,
-  jobDescription: string
-): Promise<{
+type ClaudeResult = {
+  id: string;
   experienceScore: number;
   yearsRelevant: number;
   relevantRoles: string[];
@@ -89,29 +85,85 @@ async function scoreCvWithClaude(
   tenureReasoning: string;
   redFlags: string[];
   requirementChecks: Array<{ requirement: string; status: string; evidence: string }>;
-}> {
-  const response = await client.messages.create({
-    model: "claude-sonnet-4-6",
-    max_tokens: 1500,
-    temperature: 0,
-    system: `You assess CVs for cleaning roles. Return JSON only, no markdown fencing.
+};
+
+const CLAUDE_SYSTEM = `You assess CVs for cleaning roles. Return JSON only, no markdown fencing.
 
 Score experience 0-100:
 - Strong: commercial/domestic cleaning, janitorial, housekeeping, domestic assistant, caretaker
 - Strong relevant: care worker, school worker, NHS worker
 - Relevant: hospitality, retail, warehouse, kitchen porter
 - Weaker: office/admin roles
+- IMPORTANT: Long tenure in a single role (5+ years) is very positive. Job hopping (<1.5yr avg) = red flag.
 
-For tenure: long stays in one role (5+ years) = very positive. Job hopping (<1.5yr avg) = red flag.`,
+For each candidate return: id, experienceScore (0-100), yearsRelevant, relevantRoles[], experienceReasoning (1 sentence), tenureAvgYears, tenureReasoning (1 sentence), redFlags[], requirementChecks[{requirement, status, evidence}].`;
+
+// Batch score up to 5 CVs in one Claude call
+async function scoreCvBatchWithClaude(
+  batch: Array<{ id: string; cvText: string }>,
+  jobTitle: string,
+  jobDescription: string
+): Promise<ClaudeResult[]> {
+  const candidateBlocks = batch
+    .map((c) => `### Candidate (ID: ${c.id})\n${c.cvText.slice(0, 3000)}`)
+    .join("\n---\n");
+
+  const response = await client.messages.create({
+    model: "claude-sonnet-4-6",
+    max_tokens: 4000,
+    temperature: 0,
+    system: CLAUDE_SYSTEM,
     messages: [{
       role: "user",
-      content: `Job: ${jobTitle}\n${jobDescription}\n\nCV:\n${cvText.slice(0, 4000)}\n\nReturn JSON:\n{"experienceScore":number,"yearsRelevant":number,"relevantRoles":string[],"experienceReasoning":string,"tenureAvgYears":number,"tenureReasoning":string,"redFlags":string[],"requirementChecks":[{"requirement":string,"status":"met"|"not_met"|"unclear","evidence":string}]}`,
+      content: `Job: ${jobTitle}\n${jobDescription}\n\n${candidateBlocks}\n\nReturn a JSON array with one object per candidate, same order. Each must have: id, experienceScore, yearsRelevant, relevantRoles, experienceReasoning, tenureAvgYears, tenureReasoning, redFlags, requirementChecks.`,
     }],
   });
 
   const text = response.content[0].type === "text" ? response.content[0].text : "";
   const cleaned = text.replace(/^```json?\s*\n?/i, "").replace(/\n?```\s*$/i, "");
   return JSON.parse(cleaned);
+}
+
+// Score all PDFs in batches of 5, with concurrency of 2 batches
+async function scoreAllCvsWithClaude(
+  candidates: Array<{ id: string; cvText: string }>,
+  jobTitle: string,
+  jobDescription: string
+): Promise<Map<string, ClaudeResult>> {
+  const results = new Map<string, ClaudeResult>();
+  const BATCH_SIZE = 3;
+  const CONCURRENCY = 3;
+  const batches: Array<Array<{ id: string; cvText: string }>> = [];
+
+  for (let i = 0; i < candidates.length; i += BATCH_SIZE) {
+    batches.push(candidates.slice(i, i + BATCH_SIZE));
+  }
+
+  // Process batches concurrently
+  for (let i = 0; i < batches.length; i += CONCURRENCY) {
+    const concurrent = batches.slice(i, i + CONCURRENCY).map(async (batch) => {
+      try {
+        const scored = await scoreCvBatchWithClaude(batch, jobTitle, jobDescription);
+        for (const s of scored) {
+          results.set(s.id, s);
+        }
+      } catch (e) {
+        console.error("Batch scoring failed:", e instanceof Error ? e.message : e);
+        // Individual fallback scores
+        for (const c of batch) {
+          results.set(c.id, {
+            id: c.id, experienceScore: 30, yearsRelevant: 0, relevantRoles: [],
+            experienceReasoning: "Scoring failed", tenureAvgYears: 0,
+            tenureReasoning: "Scoring failed", redFlags: ["scoring error"],
+            requirementChecks: [],
+          });
+        }
+      }
+    });
+    await Promise.all(concurrent);
+  }
+
+  return results;
 }
 
 // Main combined scoring function
@@ -136,23 +188,26 @@ export async function scoreCombined(params: {
     console.error("Distance lookup failed:", e);
   }
 
-  // 2. Match PDFs to CSV candidates
+  // 2. Batch score all PDFs with Claude (5 at a time, 2 concurrent batches)
+  const claudeResults = pdfCandidates.length > 0
+    ? await scoreAllCvsWithClaude(
+        pdfCandidates.map((p, i) => ({ id: String(i), cvText: p.cvText })),
+        jobTitle,
+        jobDescription
+      )
+    : new Map<string, ClaudeResult>();
+
+  // 3. Match PDFs to CSV candidates and build results
   const results: CombinedResult[] = [];
   const matchedCsvIndices = new Set<number>();
 
-  // Process each PDF — try to match with CSV
-  for (const pdf of pdfCandidates) {
+  for (let pi = 0; pi < pdfCandidates.length; pi++) {
+    const pdf = pdfCandidates[pi];
     const csvMatch = matchPdfToCsv(pdf.name, csvCandidates);
     const csvIndex = csvMatch ? csvCandidates.indexOf(csvMatch) : -1;
     if (csvIndex >= 0) matchedCsvIndices.add(csvIndex);
 
-    // Score experience from the actual CV
-    let claudeResult;
-    try {
-      claudeResult = await scoreCvWithClaude(pdf.cvText, jobTitle, jobDescription);
-    } catch {
-      claudeResult = null;
-    }
+    const claudeResult = claudeResults.get(String(pi)) || null;
 
     // Build commute from CSV metadata (if matched)
     const hasLicence = csvMatch
