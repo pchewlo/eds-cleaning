@@ -101,9 +101,9 @@ export function CandidateList({ candidates, jobId }: Props) {
         <button
           onClick={handleDeleteAll}
           disabled={deleting}
-          className="text-[11px] text-red-500 hover:text-red-700 disabled:opacity-40"
+          className="px-3 py-1.5 text-xs text-red-600 hover:text-white hover:bg-red-500 border border-red-200 rounded-lg transition-colors"
         >
-          {deleting ? "Deleting..." : "Clear all"}
+          {deleting ? "Deleting..." : "Clear all candidates"}
         </button>
       </div>
 
