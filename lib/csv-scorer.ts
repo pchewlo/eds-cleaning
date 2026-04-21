@@ -28,8 +28,14 @@ function scoreCommute(
   const drivingMinutes = distance?.drivingMinutes ?? null;
   const transitMinutes = distance?.transitMinutes ?? null;
 
-  // Use Google Maps driving time if available, otherwise self-reported
-  const minutes = drivingMinutes ?? selfReportedMinutes;
+  // Use the right commute time based on whether they drive
+  // If they drive → use driving time; if not → use transit time
+  let minutes: number | null;
+  if (hasLicence) {
+    minutes = drivingMinutes ?? selfReportedMinutes;
+  } else {
+    minutes = transitMinutes ?? selfReportedMinutes;
+  }
 
   let score: number;
   let viable: boolean;
@@ -84,19 +90,36 @@ function scoreExperience(candidate: CsvCandidate): {
 
   let score = Math.min(100, years * 13);
 
-  const cleaningKeywords = ["clean", "janitor", "housekeep", "hygiene", "operative"];
+  // Direct cleaning or closely related roles (per Ed's list)
+  const cleaningKeywords = [
+    "clean", "janitor", "housekeep", "hygiene", "operative",
+    "domestic assistant", "caretaker",
+  ];
   const isDirectCleaning = cleaningKeywords.some((k) =>
     recentRole.toLowerCase().includes(k)
   );
 
-  const relevantKeywords = ["care", "hospital", "retail", "warehouse", "kitchen", "porter", "hotel", "laundry"];
-  const isRelevant = relevantKeywords.some((k) =>
+  // Strong relevant experience (per Ed: care, school, NHS count as strong)
+  const strongRelevantKeywords = [
+    "care worker", "care assistant", "carer",
+    "school", "nhs", "hospital",
+    "domestic", "caretaker",
+  ];
+  const isStrongRelevant = strongRelevantKeywords.some((k) =>
+    recentRole.toLowerCase().includes(k)
+  );
+
+  const relevantKeywords = ["care", "hospital", "retail", "warehouse", "kitchen", "porter", "hotel", "laundry", "school", "nhs"];
+  const isRelevant = !isStrongRelevant && relevantKeywords.some((k) =>
     recentRole.toLowerCase().includes(k)
   );
 
   const relevantRoles: string[] = [];
   if (isDirectCleaning) {
     score = Math.min(100, score + 15);
+    relevantRoles.push(recentRole);
+  } else if (isStrongRelevant) {
+    score = Math.min(100, score + 12);
     relevantRoles.push(recentRole);
   } else if (isRelevant) {
     score = Math.min(100, score + 5);
@@ -109,6 +132,7 @@ function scoreExperience(candidate: CsvCandidate): {
   if (recentRole) {
     reasoning += ` Most recent role: ${recentRole}.`;
     if (isDirectCleaning) reasoning += " Directly relevant.";
+    else if (isStrongRelevant) reasoning += " Strong relevant background.";
     else if (isRelevant) reasoning += " Related field.";
     else reasoning += " Not directly cleaning-related.";
   } else {

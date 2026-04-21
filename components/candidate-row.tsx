@@ -42,17 +42,25 @@ export function CandidateRow({ candidate, rank }: Props) {
         </td>
         <td className="px-3 py-3">
           <div className="text-[13px] text-slate-600 tabular-nums">
-            {candidate.commute.drivingMinutes != null ? (
-              <span>{candidate.commute.drivingMinutes} min</span>
-            ) : candidate.commute.estimatedMinutes != null ? (
-              <span>~{candidate.commute.estimatedMinutes} min</span>
-            ) : (
-              <span className="text-slate-400">—</span>
-            )}
-            {candidate.commute.hasDriverLicence && (
-              <span className="ml-1 text-slate-400">🚗</span>
-            )}
+            {(() => {
+              // Show driving time if they drive, transit if they don't
+              const hasLicence = candidate.commute.hasDriverLicence;
+              const relevantTime = hasLicence
+                ? candidate.commute.drivingMinutes
+                : candidate.commute.transitMinutes;
+              const fallback = candidate.commute.estimatedMinutes;
+
+              if (relevantTime != null) {
+                return <span>{relevantTime} min {hasLicence ? "🚗" : "🚌"}</span>;
+              } else if (fallback != null) {
+                return <span>~{fallback} min {hasLicence ? "🚗" : "🚌"}</span>;
+              }
+              return <span className="text-slate-400">—</span>;
+            })()}
           </div>
+          {!candidate.commute.viable && (
+            <span className="text-red-500 text-[11px] font-medium">(risky)</span>
+          )}
         </td>
         <td className="px-3 py-3">
           {candidate.candidatePhone ? (

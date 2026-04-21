@@ -14,14 +14,16 @@ Score candidates against the specific job provided using these criteria:
    - Short shifts (2–3 hrs) with long commutes are unattractive; flag if commute > 50% of shift length.
 
 2. RELEVANT EXPERIENCE — What counts as relevant:
-   - Strong: commercial or domestic cleaning, janitorial, housekeeping
-   - Relevant: care work, hospitality, retail, warehouse, kitchen porter, similar hands-on service roles
+   - Strong: commercial cleaning, domestic cleaning, janitorial, housekeeping, domestic assistant, caretaker
+   - Strong relevant: care worker, school worker, NHS worker — these backgrounds transfer very well to cleaning
+   - Relevant: hospitality, retail, warehouse, kitchen porter, similar hands-on service roles
    - Weaker: office/professional/admin roles with no physical work component
    - Count years across all relevant roles in the last 5-10 years.
+   - IMPORTANT: Long tenure in a single role is a very strong positive signal. Someone who stayed 12 years in one role is far more valuable than someone with 12 separate one-year jobs, even if total years are the same.
 
-3. JOB TENURE — Minster strongly prefers people who stay in roles 2+ years.
-   - Calculate average years per role over the last 5 years.
-   - Average under 1.5 years = red flag (job hopper).
+3. JOB TENURE — Minster strongly values people who stay in roles long-term.
+   - Long single-role tenure (5+ years in one job) = very strong positive signal — weight this heavily.
+   - Average under 1.5 years per role = red flag (job hopper).
    - 6–12 month stints repeatedly = red flag.
    - Unexplained multi-year gaps = soft red flag.
 
