@@ -48,7 +48,17 @@ export function UploadSection({ jobId }: Props) {
     if (!canRank) return;
     setUploading(true);
     setResult(null);
-    setProgress("Uploading files...");
+
+    // Estimate time and show meaningful progress
+    const hasCsv = csvFile !== null;
+    const pdfCount = cvFiles.length;
+    if (hasCsv && pdfCount > 0) {
+      setProgress(`Ranking ${pdfCount} CVs against metadata — this takes ~${Math.max(15, Math.ceil(pdfCount / 3) * 10)}s...`);
+    } else if (pdfCount > 0) {
+      setProgress(`Scoring ${pdfCount} CVs — this takes ~${Math.max(10, Math.ceil(pdfCount / 3) * 10)}s...`);
+    } else {
+      setProgress("Processing CSV...");
+    }
 
     const formData = new FormData();
     if (csvFile) formData.append("csv", csvFile);
@@ -175,25 +185,33 @@ export function UploadSection({ jobId }: Props) {
       </div>
 
       {/* Rank button */}
-      <div className="flex items-center gap-3">
-        <button
-          onClick={handleRank}
-          disabled={!canRank || uploading}
-          className="px-5 py-2.5 bg-slate-900 text-white text-sm font-medium rounded-lg disabled:opacity-30 hover:bg-slate-800 transition-colors"
-        >
-          {uploading ? progress || "Processing..." : `Rank candidates`}
-        </button>
-        {!csvFile && cvFiles.length === 0 && (
-          <span className="text-[11px] text-slate-400">Upload a CSV and/or CVs to get started</span>
-        )}
-        {csvFile && cvFiles.length === 0 && (
-          <span className="text-[11px] text-amber-600">CSV only — add CVs for more accurate experience scoring</span>
-        )}
-        {!csvFile && cvFiles.length > 0 && (
-          <span className="text-[11px] text-amber-600">CVs only — add CSV for commute data and contact details</span>
-        )}
-        {csvFile && cvFiles.length > 0 && (
-          <span className="text-[11px] text-emerald-600">✓ CSV + {cvFiles.length} CVs ready — best accuracy</span>
+      <div>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={handleRank}
+            disabled={!canRank || uploading}
+            className="px-5 py-2.5 bg-slate-900 text-white text-sm font-medium rounded-lg disabled:opacity-30 hover:bg-slate-800 transition-colors"
+          >
+            {uploading ? "Ranking..." : "Rank candidates"}
+          </button>
+          {!uploading && !csvFile && cvFiles.length === 0 && (
+            <span className="text-[11px] text-slate-400">Upload a CSV and/or CVs to get started</span>
+          )}
+          {!uploading && csvFile && cvFiles.length === 0 && (
+            <span className="text-[11px] text-amber-600">CSV only — add CVs for more accurate experience scoring</span>
+          )}
+          {!uploading && !csvFile && cvFiles.length > 0 && (
+            <span className="text-[11px] text-amber-600">CVs only — add CSV for commute data and contact details</span>
+          )}
+          {!uploading && csvFile && cvFiles.length > 0 && (
+            <span className="text-[11px] text-emerald-600">✓ CSV + {cvFiles.length} CVs ready — best accuracy</span>
+          )}
+        </div>
+        {uploading && progress && (
+          <div className="mt-3 flex items-center gap-3 p-3 bg-slate-50 border border-slate-200 rounded-lg">
+            <div className="h-4 w-4 rounded-full border-2 border-slate-300 border-t-slate-700 animate-spin flex-shrink-0" />
+            <span className="text-[13px] text-slate-600">{progress}</span>
+          </div>
         )}
       </div>
 
