@@ -6,10 +6,13 @@ import { eq, and } from "drizzle-orm";
 import { extractText } from "@/lib/cv-parser";
 import { parseCsvCandidates } from "@/lib/csv-parser";
 import { scoreCombined } from "@/lib/combined-scorer";
-import { scoreCsvCandidates } from "@/lib/csv-scorer";
 import { sendDigestEmail } from "@/lib/digest";
 import { createHash } from "crypto";
 import type { Job } from "@/lib/types";
+
+function getQualAnswer(c: { qualifications: Array<{ question: string; answer: string }> }, keyword: string): string | undefined {
+  return c.qualifications.find(q => q.question.toLowerCase().includes(keyword.toLowerCase()))?.answer;
+}
 
 function toV1Job(dbJob: { id: string; title: string; location: string | null; description: string }): Job {
   return {
@@ -97,28 +100,36 @@ export async function POST(
   } else if (csvCandidates.length > 0) {
     // CSV only — algorithmic scoring
     const v1Job = toV1Job(job);
-    const csvScored = await scoreCsvCandidates(csvCandidates, v1Job);
-    scoredResults = csvScored.map((s) => ({
-      candidateName: s.candidateName,
-      candidateEmail: s.candidateEmail,
-      candidatePhone: s.candidatePhone,
-      candidatePostcode: s.candidatePostcode,
-      overallScore: s.overallScore,
-      recommendation: s.recommendation,
-      commute: s.commute,
-      experience: {
-        score: s.experience.score,
-        yearsFromCv: 0,
-        yearsFromIndeed: s.experience.yearsOfRelevantWork,
-        relevantRoles: s.experience.relevantRoles,
-        reasoning: s.experience.reasoning,
-      },
-      tenure: { avgYearsPerRole: 0, reasoning: "No CV available" },
-      requirementsMet: s.requirementsMet,
-      redFlags: s.redFlags,
-      summary: s.summary + " (CSV only)",
-      source: "csv_only" as const,
-    }));
+    // CSV only — no CVs to verify, mark as unverified
+    scoredResults = csvCandidates.map((csv) => {
+      const hasLicence = getQualAnswer(csv, "driving")?.toLowerCase() === "yes";
+      const indeedYears = parseInt(getQualAnswer(csv, "cleaning experience") || "0") || 0;
+      const postcode = getQualAnswer(csv, "postcode") || "";
+      const selfReported = getQualAnswer(csv, "travel") || getQualAnswer(csv, "long") || null;
+      return {
+        candidateName: csv.name,
+        candidateEmail: csv.email,
+        candidatePhone: csv.phone,
+        candidatePostcode: postcode || null,
+        overallScore: -1,
+        recommendation: "reject" as const,
+        commute: {
+          viable: false, estimatedMinutes: selfReported ? parseInt(selfReported) || null : null,
+          drivingMinutes: null, transitMinutes: null, hasDriverLicence: hasLicence,
+          reasoning: `${postcode || csv.location} → job. Self-reported: ${selfReported || "N/A"}. ${hasLicence ? "Has" : "No"} licence.`,
+        },
+        experience: {
+          score: 0, yearsFromCv: 0, yearsFromIndeed: indeedYears,
+          relevantRoles: csv.relevantExperience ? [csv.relevantExperience] : [],
+          reasoning: `Claims ${indeedYears} years on Indeed — no CV to verify.`,
+        },
+        tenure: { avgYearsPerRole: 0, reasoning: "No CV available." },
+        requirementsMet: [],
+        redFlags: ["No CV uploaded — cannot verify experience"],
+        summary: `No CV to verify. Indeed: ${indeedYears}yr claimed, ${hasLicence ? "drives" : "no licence"}.`,
+        source: "csv_only" as const,
+      };
+    });
   } else {
     // PDFs only — Claude scoring without metadata
     scoredResults = await scoreCombined({

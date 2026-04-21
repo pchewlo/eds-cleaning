@@ -124,13 +124,15 @@ export function CandidateList({ candidates, jobId }: Props) {
 function CandidateRow({ candidate: c }: { candidate: Candidate }) {
   const [expanded, setExpanded] = useState(false);
 
-  const score100 = (c.score ?? 0) * 10;
-  const scoreBg =
-    score100 >= 75
-      ? "bg-emerald-100 text-emerald-700"
-      : score100 >= 50
-      ? "bg-amber-100 text-amber-700"
-      : "bg-red-100 text-red-700";
+  const isUnverified = c.score !== null && c.score < 0;
+  const score100 = isUnverified ? 0 : (c.score ?? 0) * 10;
+  const scoreBg = isUnverified
+    ? "bg-slate-100 text-slate-400"
+    : score100 >= 75
+    ? "bg-emerald-100 text-emerald-700"
+    : score100 >= 50
+    ? "bg-amber-100 text-amber-700"
+    : "bg-red-100 text-red-700";
 
   const commute = c.metadata?.commute as CommuteData | undefined;
   const experience = c.metadata?.experience as ExperienceData | undefined;
@@ -154,7 +156,7 @@ function CandidateRow({ candidate: c }: { candidate: Candidate }) {
       >
         {/* Score */}
         <span className={`flex-shrink-0 w-10 h-10 rounded-lg flex items-center justify-center text-sm font-semibold ${scoreBg}`}>
-          {c.score !== null ? (c.score).toFixed(1) : "—"}
+          {isUnverified ? "N/A" : c.score !== null ? c.score.toFixed(1) : "—"}
         </span>
 
         {/* Name + reasoning */}

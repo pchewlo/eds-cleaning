@@ -327,11 +327,7 @@ export async function scoreCombined(params: {
     if (hasLicence) commuteScore = Math.min(100, commuteScore + 10);
     else commuteScore = Math.max(0, commuteScore - 10);
 
-    // Without a CV, use Indeed self-reported experience (less reliable)
-    const expScore = Math.min(100, indeedYears * 13);
-    const overall = Math.round(commuteScore * 0.25 + expScore * 0.35 + 50 * 0.25 + 50 * 0.15);
-    const recommendation = overall >= 75 ? "strong" : overall >= 50 ? "consider" : "reject";
-
+    // No CV — cannot score reliably. Set to -1 to sort to bottom.
     const commuteReasonParts = [];
     if (postcode) commuteReasonParts.push(`${postcode} → ${jobPostcode}`);
     if (selfReported != null) commuteReasonParts.push(`Self-reported: ${selfReported} min`);
@@ -344,8 +340,8 @@ export async function scoreCombined(params: {
       candidateEmail: csv.email,
       candidatePhone: csv.phone,
       candidatePostcode: postcode || null,
-      overallScore: overall,
-      recommendation,
+      overallScore: -1, // No score — no CV to verify
+      recommendation: "reject",
       commute: {
         viable: commuteViable,
         estimatedMinutes: selfReported,
@@ -355,19 +351,19 @@ export async function scoreCombined(params: {
         reasoning: commuteReasonParts.join(". ") + ".",
       },
       experience: {
-        score: expScore,
+        score: 0,
         yearsFromCv: 0,
         yearsFromIndeed: indeedYears,
         relevantRoles: csv.relevantExperience ? [csv.relevantExperience] : [],
-        reasoning: `${indeedYears} years claimed on Indeed (no CV uploaded to verify). Recent role: ${csv.relevantExperience || "not listed"}.`,
+        reasoning: `Claims ${indeedYears} years on Indeed — no CV uploaded to verify.`,
       },
       tenure: {
         avgYearsPerRole: 0,
-        reasoning: "No CV available — cannot assess tenure.",
+        reasoning: "No CV available.",
       },
       requirementsMet: [],
-      redFlags: indeedYears < 1 ? ["Less than 1 year experience claimed"] : [],
-      summary: buildSummary(overall, recommendation, commuteScore, expScore, hasLicence, []) + " (CSV only — no CV to verify)",
+      redFlags: ["No CV uploaded — cannot verify experience"],
+      summary: `No CV to verify. Indeed data: ${indeedYears}yr claimed, ${hasLicence ? "has licence" : "no licence"}, ${commuteMin ? commuteMin + "min commute" : "unknown commute"}.`,
       source: "csv_only",
     });
   }
