@@ -11,6 +11,10 @@ export default async function JobsPage() {
   const session = await auth();
   if (!session) redirect("/login");
 
+  // Debug: check raw count first
+  const allJobs = await db.select({ id: jobs.id, archived: jobs.archivedAt }).from(jobs);
+  console.log(`[DEBUG] Total jobs in DB: ${allJobs.length}, archived: ${allJobs.filter(j => j.archived !== null).length}`);
+
   const jobList = await db
     .select({
       id: jobs.id,
@@ -25,6 +29,8 @@ export default async function JobsPage() {
     .where(isNull(jobs.archivedAt))
     .groupBy(jobs.id)
     .orderBy(sql`${jobs.createdAt} desc`);
+
+  console.log(`[DEBUG] Jobs after filter: ${jobList.length}`);
 
   return (
     <main className="w-full max-w-4xl mx-auto px-6 py-10">
