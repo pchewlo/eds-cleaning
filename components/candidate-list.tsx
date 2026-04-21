@@ -14,7 +14,9 @@ interface CommuteData {
 
 interface ExperienceData {
   score: number;
-  yearsOfRelevantWork: number;
+  yearsOfRelevantWork?: number;
+  yearsFromCv?: number;
+  yearsFromIndeed?: number;
   relevantRoles: string[];
   reasoning: string;
 }
@@ -264,14 +266,31 @@ function CandidateRow({ candidate: c }: { candidate: Candidate }) {
                 <div>
                   <h4 className="text-[12px] font-semibold text-slate-900 mb-1.5">Experience</h4>
                   <ul className="space-y-0.5 text-[13px] text-slate-600 pl-3">
-                    <li className="flex items-center gap-2">
-                      <span className="text-slate-400 text-[10px]">•</span>
-                      {experience.yearsOfRelevantWork} years commercial cleaning experience claimed
-                    </li>
+                    {(experience.yearsFromCv != null && experience.yearsFromCv > 0) && (
+                      <li className="flex items-center gap-2">
+                        <span className="text-slate-400 text-[10px]">•</span>
+                        {experience.yearsFromCv} years relevant experience (from CV)
+                      </li>
+                    )}
+                    {(experience.yearsFromIndeed != null && experience.yearsFromIndeed > 0) && (
+                      <li className="flex items-center gap-2">
+                        <span className="text-slate-400 text-[10px]">•</span>
+                        {experience.yearsFromIndeed} years claimed on Indeed
+                        {experience.yearsFromCv != null && experience.yearsFromCv > 0 && experience.yearsFromIndeed !== experience.yearsFromCv
+                          ? <span className="text-amber-600 ml-1">(differs from CV)</span>
+                          : null}
+                      </li>
+                    )}
+                    {(experience.yearsOfRelevantWork != null && experience.yearsOfRelevantWork > 0 && !experience.yearsFromCv && !experience.yearsFromIndeed) && (
+                      <li className="flex items-center gap-2">
+                        <span className="text-slate-400 text-[10px]">•</span>
+                        {experience.yearsOfRelevantWork} years relevant experience
+                      </li>
+                    )}
                     {experience.relevantRoles.length > 0 && (
                       <li className="flex items-center gap-2">
                         <span className="text-slate-400 text-[10px]">•</span>
-                        Most recent role: {experience.relevantRoles[0]}
+                        Relevant roles: {experience.relevantRoles.join(", ")}
                       </li>
                     )}
                     {experience.reasoning && (
