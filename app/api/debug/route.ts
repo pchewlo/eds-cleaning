@@ -1,20 +1,27 @@
-import { db } from "@/lib/db";
-import { jobs } from "@/lib/db/schema";
+import postgres from "postgres";
 
 export async function GET() {
+  const url = process.env.DATABASE_URL;
+  if (!url) return Response.json({ error: "No DATABASE_URL" });
+
   try {
-    const allJobs = await db.select({ id: jobs.id, title: jobs.title, archived: jobs.archivedAt }).from(jobs);
+    const sql = postgres(url);
+    const result = await sql`SELECT id, title, archived_at FROM jobs`;
+    const tables = await sql`SELECT tablename FROM pg_tables WHERE schemaname = 'public'`;
+    await sql.end();
+
     return Response.json({
       dbConnected: true,
-      totalJobs: allJobs.length,
-      jobs: allJobs,
-      dbUrl: process.env.DATABASE_URL?.substring(0, 30) + "...",
+      totalJobs: result.length,
+      jobs: result,
+      tables: tables.map((t: { tablename: string }) => t.tablename),
+      dbUrlPrefix: url.substring(0, 50),
     });
   } catch (e) {
     return Response.json({
       dbConnected: false,
       error: e instanceof Error ? e.message : "Unknown",
-      dbUrl: process.env.DATABASE_URL?.substring(0, 30) + "...",
+      dbUrlPrefix: url?.substring(0, 50),
     });
   }
 }
