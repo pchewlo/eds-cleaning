@@ -110,6 +110,7 @@ export default async function JobDetailPage({
           reasoning: c.rankReasoning,
           flags: (c.rankFlags as string[]) || [],
           uploadedAt: c.uploadedAt?.toISOString() || null,
+          metadata: c.metadataJson as Record<string, unknown> | null,
         }))}
       />
     </main>

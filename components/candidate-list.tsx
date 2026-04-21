@@ -2,6 +2,28 @@
 
 import { useState } from "react";
 
+interface CommuteData {
+  viable: boolean;
+  estimatedMinutes: number | null;
+  drivingMinutes: number | null;
+  transitMinutes: number | null;
+  hasDriverLicence: boolean | null;
+  reasoning: string;
+}
+
+interface ExperienceData {
+  score: number;
+  yearsOfRelevantWork: number;
+  relevantRoles: string[];
+  reasoning: string;
+}
+
+interface RequirementData {
+  requirement: string;
+  status: "met" | "not_met" | "unclear";
+  evidence: string;
+}
+
 interface Candidate {
   id: string;
   name: string | null;
@@ -11,6 +33,7 @@ interface Candidate {
   reasoning: string | null;
   flags: string[];
   uploadedAt: string | null;
+  metadata: Record<string, unknown> | null;
 }
 
 interface Props {
@@ -22,7 +45,6 @@ function formatDate(iso: string): string {
   const now = new Date();
   const diffMs = now.getTime() - d.getTime();
   const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-
   if (diffDays === 0) return "Today";
   if (diffDays === 1) return "Yesterday";
   return d.toLocaleDateString("en-GB", { day: "numeric", month: "short" });
@@ -82,12 +104,27 @@ export function CandidateList({ candidates }: Props) {
 function CandidateRow({ candidate: c }: { candidate: Candidate }) {
   const [expanded, setExpanded] = useState(false);
 
+  const score100 = (c.score ?? 0) * 10;
   const scoreBg =
-    (c.score ?? 0) >= 7.5
+    score100 >= 75
       ? "bg-emerald-100 text-emerald-700"
-      : (c.score ?? 0) >= 5
+      : score100 >= 50
       ? "bg-amber-100 text-amber-700"
       : "bg-red-100 text-red-700";
+
+  const commute = c.metadata?.commute as CommuteData | undefined;
+  const experience = c.metadata?.experience as ExperienceData | undefined;
+  const requirements = c.metadata?.requirementsMet as RequirementData[] | undefined;
+  const redFlags = c.metadata?.redFlags as string[] | undefined;
+  const hasLicence = commute?.hasDriverLicence;
+
+  // Show the relevant commute time in the table row
+  const commuteDisplay = (() => {
+    if (hasLicence && commute?.drivingMinutes != null) return `${commute.drivingMinutes} min 🚗`;
+    if (!hasLicence && commute?.transitMinutes != null) return `${commute.transitMinutes} min 🚌`;
+    if (commute?.estimatedMinutes != null) return `~${commute.estimatedMinutes} min`;
+    return null;
+  })();
 
   return (
     <div>
@@ -96,10 +133,8 @@ function CandidateRow({ candidate: c }: { candidate: Candidate }) {
         className="flex items-center gap-4 px-4 py-3 cursor-pointer hover:bg-slate-50/60 transition-colors"
       >
         {/* Score */}
-        <span
-          className={`flex-shrink-0 w-10 h-10 rounded-lg flex items-center justify-center text-sm font-semibold ${scoreBg}`}
-        >
-          {c.score !== null ? c.score.toFixed(1) : "—"}
+        <span className={`flex-shrink-0 w-10 h-10 rounded-lg flex items-center justify-center text-sm font-semibold ${scoreBg}`}>
+          {c.score !== null ? (c.score).toFixed(1) : "—"}
         </span>
 
         {/* Name + reasoning */}
@@ -108,11 +143,16 @@ function CandidateRow({ candidate: c }: { candidate: Candidate }) {
             {c.name || "Unknown"}
           </div>
           {c.reasoning && (
-            <p className="text-[12px] text-slate-500 truncate mt-0.5">
-              {c.reasoning}
-            </p>
+            <p className="text-[12px] text-slate-500 truncate mt-0.5">{c.reasoning}</p>
           )}
         </div>
+
+        {/* Commute */}
+        {commuteDisplay && (
+          <span className="flex-shrink-0 text-[12px] text-slate-500 tabular-nums hidden lg:block">
+            {commuteDisplay}
+          </span>
+        )}
 
         {/* Phone */}
         {c.phone && (
@@ -128,77 +168,134 @@ function CandidateRow({ candidate: c }: { candidate: Candidate }) {
         {/* Flags */}
         <div className="flex-shrink-0 flex gap-1 hidden md:flex">
           {c.flags.slice(0, 2).map((f, i) => (
-            <span
-              key={i}
-              className="px-1.5 py-0.5 bg-red-50 text-red-600 rounded text-[10px]"
-            >
+            <span key={i} className="px-1.5 py-0.5 bg-red-50 text-red-600 rounded text-[10px]">
               {f}
             </span>
           ))}
         </div>
 
-        {/* Chevron */}
         <svg
-          className={`w-3.5 h-3.5 text-slate-400 flex-shrink-0 transition-transform ${
-            expanded ? "rotate-180" : ""
-          }`}
-          fill="none"
-          viewBox="0 0 24 24"
-          stroke="currentColor"
-          strokeWidth={2}
+          className={`w-3.5 h-3.5 text-slate-400 flex-shrink-0 transition-transform ${expanded ? "rotate-180" : ""}`}
+          fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}
         >
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            d="M19 9l-7 7-7-7"
-          />
+          <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
         </svg>
       </div>
 
       {expanded && (
         <div className="px-4 pb-4 pt-1">
-          <div className="bg-slate-50 rounded-lg border border-slate-200/80 p-4 text-sm">
+          <div className="bg-slate-50 rounded-lg border border-slate-200/80 px-5 py-4 text-sm">
             {/* Contact */}
-            <div className="flex flex-wrap gap-x-5 gap-y-1 mb-3 text-[13px]">
+            <div className="flex flex-wrap gap-x-5 gap-y-1 mb-4 text-[13px]">
               {c.phone && (
-                <a
-                  href={`tel:${c.phone.replace(/['\s]/g, "")}`}
-                  className="text-slate-800 font-medium hover:underline"
-                >
+                <a href={`tel:${c.phone.replace(/['\s]/g, "")}`} className="text-slate-800 font-medium hover:underline">
                   📞 {c.phone.replace(/^'/, "")}
                 </a>
               )}
               {c.email && (
-                <a
-                  href={`mailto:${c.email}`}
-                  className="text-slate-600 hover:underline"
-                >
+                <a href={`mailto:${c.email}`} className="text-slate-600 hover:underline">
                   ✉️ {c.email}
                 </a>
               )}
+              {c.metadata?.postcode != null && (
+                <span className="text-slate-500">📍 {`${c.metadata.postcode}`}</span>
+              )}
             </div>
 
-            {/* Reasoning */}
-            {c.reasoning && (
-              <p className="text-[13px] text-slate-700 mb-3">{c.reasoning}</p>
-            )}
+            {/* Summary */}
+            {c.reasoning && <p className="text-[13px] text-slate-600 mb-4">{c.reasoning}</p>}
 
-            {/* Flags */}
-            {c.flags.length > 0 && (
-              <div>
-                <h4 className="text-[11px] font-semibold text-red-700 uppercase tracking-wider mb-1">
-                  Flags
-                </h4>
-                <ul className="space-y-0.5 text-[13px] text-red-600">
-                  {c.flags.map((f, i) => (
-                    <li key={i} className="flex items-center gap-2">
-                      <span className="text-red-400 text-[10px]">•</span>
-                      {f}
+            <div className="space-y-4">
+              {/* Commute */}
+              {commute && (
+                <div>
+                  <h4 className="text-[12px] font-semibold text-slate-900 mb-1.5">Commute</h4>
+                  <ul className="space-y-0.5 text-[13px] text-slate-600 pl-3">
+                    {commute.estimatedMinutes != null && (
+                      <li className="flex items-center gap-2">
+                        <span className="text-slate-400 text-[10px]">•</span>
+                        Self-reported: {commute.estimatedMinutes} min
+                      </li>
+                    )}
+                    {commute.drivingMinutes != null && (
+                      <li className="flex items-center gap-2">
+                        <span className="text-slate-400 text-[10px]">•</span>
+                        Drive: {commute.drivingMinutes} min
+                      </li>
+                    )}
+                    {commute.transitMinutes != null && (
+                      <li className="flex items-center gap-2">
+                        <span className="text-slate-400 text-[10px]">•</span>
+                        Public transport: {commute.transitMinutes} min
+                      </li>
+                    )}
+                    <li className="flex items-center gap-2">
+                      <span className="text-slate-400 text-[10px]">•</span>
+                      {commute.hasDriverLicence ? "Has driving licence" : "No driving licence"}
                     </li>
-                  ))}
-                </ul>
-              </div>
-            )}
+                  </ul>
+                </div>
+              )}
+
+              {/* Experience */}
+              {experience && (
+                <div>
+                  <h4 className="text-[12px] font-semibold text-slate-900 mb-1.5">Experience</h4>
+                  <ul className="space-y-0.5 text-[13px] text-slate-600 pl-3">
+                    <li className="flex items-center gap-2">
+                      <span className="text-slate-400 text-[10px]">•</span>
+                      {experience.yearsOfRelevantWork} years commercial cleaning experience claimed
+                    </li>
+                    {experience.relevantRoles.length > 0 && (
+                      <li className="flex items-center gap-2">
+                        <span className="text-slate-400 text-[10px]">•</span>
+                        Most recent role: {experience.relevantRoles[0]}
+                      </li>
+                    )}
+                    {experience.reasoning && (
+                      <li className="flex items-center gap-2">
+                        <span className="text-slate-400 text-[10px]">•</span>
+                        {experience.reasoning}
+                      </li>
+                    )}
+                  </ul>
+                </div>
+              )}
+
+              {/* Requirements */}
+              {requirements && requirements.length > 0 && (
+                <div>
+                  <h4 className="text-[12px] font-semibold text-slate-900 mb-1.5">Requirements</h4>
+                  <ul className="space-y-0.5 text-[13px] pl-3">
+                    {requirements.map((req, i) => (
+                      <li key={i} className="flex items-center gap-2 text-slate-600">
+                        <span className={`text-[10px] ${
+                          req.status === "met" ? "text-emerald-500" : req.status === "not_met" ? "text-red-500" : "text-slate-400"
+                        }`}>
+                          {req.status === "met" ? "●" : req.status === "not_met" ? "●" : "○"}
+                        </span>
+                        {req.requirement} — <span className="text-slate-400">{req.evidence}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {/* Red flags */}
+              {redFlags && redFlags.length > 0 && (
+                <div>
+                  <h4 className="text-[12px] font-semibold text-red-700 mb-1.5">Red flags</h4>
+                  <ul className="space-y-0.5 text-[13px] text-red-600 pl-3">
+                    {redFlags.map((f, i) => (
+                      <li key={i} className="flex items-center gap-2">
+                        <span className="text-red-400 text-[10px]">•</span>
+                        {f}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       )}
