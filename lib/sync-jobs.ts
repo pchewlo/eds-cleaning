@@ -9,7 +9,13 @@ export async function syncJobsFromSite(): Promise<void> {
   const scrapedJobs = await getJobs();
 
   for (const scraped of scrapedJobs) {
-    // Use the Minster job ID as our DB ID
+    // Clean up title — strip HTML junk, newlines, extra whitespace
+    const cleanTitle = scraped.title
+      .replace(/\s+/g, " ")
+      .replace(/PART TIME|FULL TIME/gi, "")
+      .trim();
+    const cleanLocation = scraped.location.replace(/\s+/g, " ").trim();
+
     const [existing] = await db
       .select({ id: jobs.id })
       .from(jobs)
@@ -17,22 +23,20 @@ export async function syncJobsFromSite(): Promise<void> {
       .limit(1);
 
     if (existing) {
-      // Update existing job
       await db
         .update(jobs)
         .set({
-          title: scraped.title,
-          location: scraped.location,
+          title: cleanTitle,
+          location: cleanLocation,
           description: buildDescription(scraped),
-          archivedAt: null, // re-activate if it was archived
+          archivedAt: null,
         })
         .where(eq(jobs.id, scraped.id));
     } else {
-      // Insert new job
       await db.insert(jobs).values({
         id: scraped.id,
-        title: scraped.title,
-        location: scraped.location,
+        title: cleanTitle,
+        location: cleanLocation,
         description: buildDescription(scraped),
         recipientEmail: DEFAULT_RECIPIENT,
       });

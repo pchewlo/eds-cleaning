@@ -21,9 +21,9 @@ export const users = pgTable("users", {
 });
 
 export const jobs = pgTable("jobs", {
-  id: uuid("id")
+  id: text("id")
     .primaryKey()
-    .default(sql`gen_random_uuid()`),
+    .$defaultFn(() => crypto.randomUUID()),
   title: text("title").notNull(),
   location: text("location"),
   description: text("description").notNull(),
@@ -40,7 +40,7 @@ export const candidates = pgTable(
     id: uuid("id")
       .primaryKey()
       .default(sql`gen_random_uuid()`),
-    jobId: uuid("job_id")
+    jobId: text("job_id")
       .references(() => jobs.id, { onDelete: "cascade" })
       .notNull(),
     name: text("name"),
@@ -70,7 +70,7 @@ export const uploads = pgTable("uploads", {
   id: uuid("id")
     .primaryKey()
     .default(sql`gen_random_uuid()`),
-  jobId: uuid("job_id").references(() => jobs.id),
+  jobId: text("job_id").references(() => jobs.id),
   uploadedBy: uuid("uploaded_by").references(() => users.id),
   uploadedAt: timestamp("uploaded_at").defaultNow(),
   newCount: integer("new_count"),
