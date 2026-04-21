@@ -87,44 +87,43 @@ type ClaudeResult = {
   requirementChecks: Array<{ requirement: string; status: string; evidence: string }>;
 };
 
-const CLAUDE_SYSTEM = `You assess CVs for cleaning roles. Return JSON only, no markdown fencing. Be thorough.
+const HAIKU_EXTRACT_SYSTEM = `You extract structured work history from CVs. Return JSON only, no markdown fencing.
 
-Score experience 0-100:
-- Strong: commercial/domestic cleaning, janitorial, housekeeping, domestic assistant, caretaker
-- Strong relevant: care worker, school worker, NHS worker
-- Relevant: hospitality, retail, warehouse, kitchen porter
-- Weaker: office/admin roles
-- IMPORTANT: Long tenure in a single role (5+ years) is very positive. Job hopping (<1.5yr avg) = red flag.
-
-For each candidate return:
+For each candidate extract:
 - id: the candidate ID string
-- experienceScore: 0-100
-- yearsRelevant: total years of relevant work
-- relevantRoles: array of strings like "In-Store Cleaner, Aldi (2017-2020)" — list EVERY relevant role with employer and dates from the CV
-- experienceReasoning: 2-3 sentences covering what makes them suitable or not
-- tenureAvgYears: average years per role
-- tenureReasoning: 1-2 sentences
-- redFlags: array of warning strings
-- requirementChecks: [{requirement, status: "met"|"not_met"|"unclear", evidence}]`;
+- name: full name
+- roles: array of ALL jobs listed, each with {title, employer, startYear, endYear, isCleaning: boolean, isRelevant: boolean}
+  - isCleaning = true for: cleaning, janitorial, housekeeping, domestic assistant, caretaker roles
+  - isRelevant = true for: care worker, school worker, NHS, hospitality, retail, warehouse, kitchen porter AND all cleaning roles
+- hasDriverLicence: boolean | null (if mentioned in CV)
+- postcode: string | null (if mentioned)
+- redFlags: string[] (gaps, inconsistencies, concerns)
 
-// Batch score up to 5 CVs in one Claude call
-async function scoreCvBatchWithClaude(
-  batch: Array<{ id: string; cvText: string }>,
-  jobTitle: string,
-  jobDescription: string
-): Promise<ClaudeResult[]> {
+Be thorough — list EVERY role from the CV, not just relevant ones. Include employer name and years.`;
+
+// Batch extract structured data from CVs using Haiku (fast + cheap)
+async function extractCvDataBatch(
+  batch: Array<{ id: string; cvText: string }>
+): Promise<Array<{
+  id: string;
+  name: string;
+  roles: Array<{ title: string; employer: string; startYear: number; endYear: number; isCleaning: boolean; isRelevant: boolean }>;
+  hasDriverLicence: boolean | null;
+  postcode: string | null;
+  redFlags: string[];
+}>> {
   const candidateBlocks = batch
-    .map((c) => `### Candidate (ID: ${c.id})\n${c.cvText.slice(0, 3000)}`)
+    .map((c) => `### Candidate (ID: ${c.id})\n${c.cvText.slice(0, 4000)}`)
     .join("\n---\n");
 
   const response = await client.messages.create({
-    model: "claude-sonnet-4-6",
-    max_tokens: 6000,
+    model: "claude-haiku-4-5-20251001",
+    max_tokens: 4000,
     temperature: 0,
-    system: CLAUDE_SYSTEM,
+    system: HAIKU_EXTRACT_SYSTEM,
     messages: [{
       role: "user",
-      content: `Job: ${jobTitle}\n${jobDescription}\n\n${candidateBlocks}\n\nReturn a JSON array with one object per candidate, same order. For relevantRoles, list EVERY cleaning or relevant role from their CV with employer name and dates (e.g. "In-Store Cleaner, Aldi (2017-2020)"). Be thorough — do not skip roles.`,
+      content: `Extract work history from these ${batch.length} CVs. Return a JSON array.\n\n${candidateBlocks}`,
     }],
   });
 
@@ -133,37 +132,109 @@ async function scoreCvBatchWithClaude(
   return JSON.parse(cleaned);
 }
 
-// Score all PDFs in batches of 5, with concurrency of 2 batches
-async function scoreAllCvsWithClaude(
-  candidates: Array<{ id: string; cvText: string }>,
-  jobTitle: string,
-  jobDescription: string
+// Score extracted CV data algorithmically (no LLM needed)
+function scoreCvData(extracted: {
+  roles: Array<{ title: string; employer: string; startYear: number; endYear: number; isCleaning: boolean; isRelevant: boolean }>;
+  hasDriverLicence: boolean | null;
+  redFlags: string[];
+}): ClaudeResult & { relevantRoleStrings: string[] } {
+  const currentYear = new Date().getFullYear();
+  const roles = extracted.roles || [];
+
+  // Calculate years of relevant experience
+  let relevantYears = 0;
+  const relevantRoleStrings: string[] = [];
+  for (const r of roles) {
+    const end = r.endYear || currentYear;
+    const years = Math.max(0, end - (r.startYear || end));
+    if (r.isCleaning || r.isRelevant) {
+      relevantYears += years;
+      relevantRoleStrings.push(`${r.title}, ${r.employer} (${r.startYear || "?"}–${r.endYear || "present"})`);
+    }
+  }
+
+  // Experience score
+  const cleaningRoles = roles.filter((r) => r.isCleaning);
+  const relevantRoles = roles.filter((r) => r.isRelevant);
+  let expScore = Math.min(100, relevantYears * 12);
+  if (cleaningRoles.length > 0) expScore = Math.min(100, expScore + 15);
+  else if (relevantRoles.length > 0) expScore = Math.min(100, expScore + 5);
+
+  // Tenure
+  const roleDurations = roles.map((r) => Math.max(0.5, (r.endYear || currentYear) - (r.startYear || currentYear)));
+  const avgTenure = roleDurations.length > 0
+    ? roleDurations.reduce((a, b) => a + b, 0) / roleDurations.length
+    : 0;
+
+  // Check for long tenures (bonus) and job hopping (penalty)
+  const longTenure = roleDurations.some((d) => d >= 5);
+  if (longTenure) expScore = Math.min(100, expScore + 10);
+  if (avgTenure < 1.5 && roles.length >= 3) {
+    expScore = Math.max(0, expScore - 15);
+  }
+
+  // Build reasoning
+  const reasonParts: string[] = [];
+  if (cleaningRoles.length > 0) {
+    reasonParts.push(`${cleaningRoles.length} cleaning role${cleaningRoles.length > 1 ? "s" : ""} found on CV`);
+  }
+  if (relevantYears > 0) {
+    reasonParts.push(`${relevantYears} years relevant experience`);
+  }
+  if (longTenure) {
+    reasonParts.push("shows long-term commitment");
+  }
+  if (avgTenure < 1.5 && roles.length >= 3) {
+    reasonParts.push("frequent job changes");
+  }
+
+  const tenureReasoning = avgTenure > 0
+    ? `Average ${avgTenure.toFixed(1)} years per role across ${roles.length} positions.${longTenure ? " Has at least one long-term role (5+ years)." : ""}${avgTenure < 1.5 && roles.length >= 3 ? " Pattern of short tenures." : ""}`
+    : "No employment history available.";
+
+  return {
+    id: "",
+    experienceScore: expScore,
+    yearsRelevant: relevantYears,
+    relevantRoles: relevantRoleStrings,
+    experienceReasoning: reasonParts.join(". ") + "." || "No relevant experience found on CV.",
+    tenureAvgYears: parseFloat(avgTenure.toFixed(1)),
+    tenureReasoning,
+    redFlags: extracted.redFlags || [],
+    requirementChecks: [],
+    relevantRoleStrings,
+  };
+}
+
+// Extract + score all CVs: Haiku for extraction (fast), algorithmic for scoring (instant)
+async function scoreAllCvs(
+  candidates: Array<{ id: string; cvText: string }>
 ): Promise<Map<string, ClaudeResult>> {
   const results = new Map<string, ClaudeResult>();
-  const BATCH_SIZE = 3;
-  const CONCURRENCY = 3;
+  const BATCH_SIZE = 5;  // Haiku can handle bigger batches
+  const CONCURRENCY = 4; // Haiku is fast, run more concurrent
   const batches: Array<Array<{ id: string; cvText: string }>> = [];
 
   for (let i = 0; i < candidates.length; i += BATCH_SIZE) {
     batches.push(candidates.slice(i, i + BATCH_SIZE));
   }
 
-  // Process batches concurrently
   for (let i = 0; i < batches.length; i += CONCURRENCY) {
     const concurrent = batches.slice(i, i + CONCURRENCY).map(async (batch) => {
       try {
-        const scored = await scoreCvBatchWithClaude(batch, jobTitle, jobDescription);
-        for (const s of scored) {
-          results.set(s.id, s);
+        const extracted = await extractCvDataBatch(batch);
+        for (const ex of extracted) {
+          const scored = scoreCvData(ex);
+          scored.id = ex.id;
+          results.set(ex.id, scored);
         }
       } catch (e) {
-        console.error("Batch scoring failed:", e instanceof Error ? e.message : e);
-        // Individual fallback scores
+        console.error("Haiku extraction failed:", e instanceof Error ? e.message : e);
         for (const c of batch) {
           results.set(c.id, {
             id: c.id, experienceScore: 30, yearsRelevant: 0, relevantRoles: [],
-            experienceReasoning: "Scoring failed", tenureAvgYears: 0,
-            tenureReasoning: "Scoring failed", redFlags: ["scoring error"],
+            experienceReasoning: "CV extraction failed", tenureAvgYears: 0,
+            tenureReasoning: "CV extraction failed", redFlags: ["extraction error"],
             requirementChecks: [],
           });
         }
@@ -197,12 +268,10 @@ export async function scoreCombined(params: {
     console.error("Distance lookup failed:", e);
   }
 
-  // 2. Batch score all PDFs with Claude (5 at a time, 2 concurrent batches)
+  // 2. Extract data from all PDFs via Haiku (fast) + score algorithmically
   const claudeResults = pdfCandidates.length > 0
-    ? await scoreAllCvsWithClaude(
-        pdfCandidates.map((p, i) => ({ id: String(i), cvText: p.cvText })),
-        jobTitle,
-        jobDescription
+    ? await scoreAllCvs(
+        pdfCandidates.map((p, i) => ({ id: String(i), cvText: p.cvText }))
       )
     : new Map<string, ClaudeResult>();
 
