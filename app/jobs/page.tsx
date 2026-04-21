@@ -1,0 +1,82 @@
+import { db } from "@/lib/db";
+import { jobs, candidates } from "@/lib/db/schema";
+import { eq, isNull, count, sql } from "drizzle-orm";
+import Link from "next/link";
+import { auth } from "@/lib/auth";
+import { redirect } from "next/navigation";
+import { SignOutButton } from "@/components/sign-out-button";
+
+export default async function JobsPage() {
+  const session = await auth();
+  if (!session) redirect("/login");
+
+  const jobList = await db
+    .select({
+      id: jobs.id,
+      title: jobs.title,
+      location: jobs.location,
+      recipientEmail: jobs.recipientEmail,
+      createdAt: jobs.createdAt,
+      candidateCount: count(candidates.id),
+    })
+    .from(jobs)
+    .leftJoin(candidates, eq(candidates.jobId, jobs.id))
+    .where(isNull(jobs.archivedAt))
+    .groupBy(jobs.id)
+    .orderBy(sql`${jobs.createdAt} desc`);
+
+  return (
+    <main className="w-full max-w-4xl mx-auto px-6 py-10">
+      <div className="flex items-center justify-between mb-8">
+        <div>
+          <h1 className="text-xl font-semibold text-slate-900">Jobs</h1>
+          <p className="text-sm text-slate-500 mt-0.5">
+            {session.user?.email}
+          </p>
+        </div>
+        <div className="flex items-center gap-3">
+          <Link
+            href="/jobs/new"
+            className="px-4 py-2 bg-slate-900 text-white text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors"
+          >
+            New job
+          </Link>
+          <SignOutButton />
+        </div>
+      </div>
+
+      {jobList.length === 0 ? (
+        <div className="text-center py-16 text-slate-500 text-sm">
+          <p>No jobs yet.</p>
+          <Link href="/jobs/new" className="text-slate-900 font-medium underline mt-2 inline-block">
+            Create your first job
+          </Link>
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {jobList.map((job) => (
+            <Link
+              key={job.id}
+              href={`/jobs/${job.id}`}
+              className="block bg-white rounded-xl border border-slate-200 hover:border-slate-300 hover:shadow-sm p-5 transition-all"
+            >
+              <div className="flex items-start justify-between">
+                <div>
+                  <h2 className="text-[15px] font-semibold text-slate-900">
+                    {job.title}
+                  </h2>
+                  {job.location && (
+                    <p className="text-sm text-slate-500 mt-0.5">{job.location}</p>
+                  )}
+                </div>
+                <span className="text-xs text-slate-400 tabular-nums">
+                  {job.candidateCount} candidate{job.candidateCount !== 1 ? "s" : ""}
+                </span>
+              </div>
+            </Link>
+          ))}
+        </div>
+      )}
+    </main>
+  );
+}
