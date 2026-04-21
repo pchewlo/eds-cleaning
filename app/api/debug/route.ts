@@ -14,7 +14,7 @@ export async function GET() {
       dbConnected: true,
       totalJobs: result.length,
       jobs: result,
-      tables: tables.map((t: { tablename: string }) => t.tablename),
+      tables: tables.map((t) => (t as Record<string, string>).tablename),
       dbUrlPrefix: url.substring(0, 50),
     });
   } catch (e) {
