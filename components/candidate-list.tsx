@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 
 interface CommuteData {
   viable: boolean;
@@ -38,6 +39,7 @@ interface Candidate {
 
 interface Props {
   candidates: Candidate[];
+  jobId: string;
 }
 
 function formatDate(iso: string): string {
@@ -60,7 +62,18 @@ function groupByDate(candidates: Candidate[]): Map<string, Candidate[]> {
   return groups;
 }
 
-export function CandidateList({ candidates }: Props) {
+export function CandidateList({ candidates, jobId }: Props) {
+  const [deleting, setDeleting] = useState(false);
+  const router = useRouter();
+
+  const handleDeleteAll = async () => {
+    if (!confirm("Delete all candidates for this job? This cannot be undone.")) return;
+    setDeleting(true);
+    await fetch(`/api/jobs/${jobId}/candidates`, { method: "DELETE" });
+    setDeleting(false);
+    router.refresh();
+  };
+
   if (candidates.length === 0) {
     return (
       <div className="text-center py-12 text-sm text-slate-400">
@@ -77,6 +90,13 @@ export function CandidateList({ candidates }: Props) {
         <h2 className="text-[12px] font-medium text-slate-500 uppercase tracking-wide">
           All candidates ({candidates.length})
         </h2>
+        <button
+          onClick={handleDeleteAll}
+          disabled={deleting}
+          className="text-[11px] text-red-500 hover:text-red-700 disabled:opacity-40"
+        >
+          {deleting ? "Deleting..." : "Clear all"}
+        </button>
       </div>
 
       {Array.from(groups.entries()).map(([date, group]) => (

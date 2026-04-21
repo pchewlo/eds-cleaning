@@ -101,6 +101,7 @@ export default async function JobDetailPage({
 
       {/* Candidates */}
       <CandidateList
+        jobId={id}
         candidates={allCandidates.map((c) => ({
           id: c.id,
           name: c.name,
