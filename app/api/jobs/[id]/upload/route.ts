@@ -125,8 +125,9 @@ export async function POST(
       return eName === sName || eName.includes(sName) || sName.includes(eName);
     });
 
+    const sAny = s as Record<string, unknown>;
     const metadataJson = {
-      commute: s.commute,
+      commute: sAny.commute ?? null,
       experience: s.experience,
       tenure: s.tenure,
       requirementsMet: s.requirementsMet,
@@ -149,19 +150,21 @@ export async function POST(
       // Update score if this is a real score (not -1/unverified)
       if (s.overallScore > 0) {
         // Merge metadata: keep existing commute/postcode (from CSV), update experience/tenure (from CV)
-        const existingMeta = (existing.metadataJson || {}) as Record<string, unknown>;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const existingMeta = (existing.metadataJson || {}) as any;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const newData = s as any;
         const mergedMetadata = {
-          ...existingMeta,           // Keep everything from CSV (commute, postcode, etc.)
-          experience: s.experience,  // Override with CV-verified experience
-          tenure: s.tenure,          // Override with CV-verified tenure
+          ...existingMeta,                              // Keep everything from CSV (commute, postcode, etc.)
+          experience: s.experience,                     // Override with CV-verified experience
+          tenure: s.tenure,                             // Override with CV-verified tenure
           requirementsMet: s.requirementsMet,
           redFlags: s.redFlags,
           source: "combined",
         };
-        // Only override commute if the new data actually has it (not empty)
-        const newCommute = (s as Record<string, unknown>).commute as Record<string, unknown> | undefined;
-        if (newCommute && (newCommute.drivingMinutes != null || newCommute.transitMinutes != null)) {
-          mergedMetadata.commute = newCommute;
+        // Only override commute if the new data actually has Google Maps times
+        if (newData.commute?.drivingMinutes != null || newData.commute?.transitMinutes != null) {
+          mergedMetadata.commute = newData.commute;
         }
 
         updates.rankScore = String(s.overallScore / 10);
