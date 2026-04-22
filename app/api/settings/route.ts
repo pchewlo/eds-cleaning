@@ -14,7 +14,7 @@ export async function GET() {
   } catch {
     // Table might not exist yet
   }
-  return Response.json(getScoringConfig());
+  return Response.json(await getScoringConfig());
 }
 
 export async function POST(request: Request) {
