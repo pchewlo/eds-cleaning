@@ -159,8 +159,9 @@ export async function POST(
           source: "combined",
         };
         // Only override commute if the new data actually has it (not empty)
-        if (s.commute.drivingMinutes != null || s.commute.transitMinutes != null) {
-          mergedMetadata.commute = s.commute;
+        const newCommute = (s as Record<string, unknown>).commute as Record<string, unknown> | undefined;
+        if (newCommute && (newCommute.drivingMinutes != null || newCommute.transitMinutes != null)) {
+          mergedMetadata.commute = newCommute;
         }
 
         updates.rankScore = String(s.overallScore / 10);
