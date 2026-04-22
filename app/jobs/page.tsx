@@ -48,6 +48,12 @@ export default async function JobsPage() {
           </p>
         </div>
         <div className="flex items-center gap-3">
+          <Link
+            href="/settings"
+            className="px-3 py-1.5 text-xs text-slate-500 hover:text-slate-700 border border-slate-200 rounded-lg"
+          >
+            Settings
+          </Link>
           <SignOutButton />
         </div>
       </div>
