@@ -24,7 +24,7 @@ export async function POST(request: Request) {
     const sql = postgres(process.env.DATABASE_URL!, { max: 1, idle_timeout: 10 });
     await sql`CREATE TABLE IF NOT EXISTS scoring_config (id int PRIMARY KEY DEFAULT 1, config jsonb NOT NULL, updated_at timestamptz DEFAULT now(), CONSTRAINT single_row CHECK (id = 1))`;
     // Pass as object, let postgres driver handle jsonb serialization
-    await sql`INSERT INTO scoring_config (id, config) VALUES (1, ${sql.json(config)}) ON CONFLICT (id) DO UPDATE SET config = ${sql.json(config)}, updated_at = now()`;
+    await sql`INSERT INTO scoring_config (id, config) VALUES (1, ${sql.json(config as unknown as Record<string, unknown>)}) ON CONFLICT (id) DO UPDATE SET config = ${sql.json(config as unknown as Record<string, unknown>)}, updated_at = now()`;
     await sql.end();
     return Response.json({ ok: true });
   } catch (e) {
