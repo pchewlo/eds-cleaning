@@ -97,7 +97,13 @@ For each candidate extract:
   - isRelevant = true for: care worker, school worker, NHS, hospitality, retail, warehouse, kitchen porter AND all cleaning roles
 - hasDriverLicence: boolean | null (if mentioned in CV)
 - postcode: string | null (if mentioned)
-- redFlags: string[] (gaps, inconsistencies, concerns)
+- redFlags: string[] — ONLY flag genuinely concerning issues:
+  - Unexplained gaps of 2+ years
+  - Overlapping employment dates
+  - Claims that contradict other parts of the CV
+  - DO NOT flag long tenure in one role — that is a POSITIVE, not a red flag
+  - DO NOT flag having only one or two roles — stability is good
+  - DO NOT flag lack of variety — we want people who stay put
 
 Be thorough — list EVERY role from the CV, not just relevant ones. Include employer name and years.`;
 
