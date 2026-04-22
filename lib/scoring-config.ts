@@ -148,7 +148,7 @@ Be thorough — list EVERY role from the CV, not just relevant ones. Include emp
 export async function getScoringConfig(): Promise<ScoringConfig> {
   try {
     const postgres = (await import("postgres")).default;
-    const sql = postgres(process.env.DATABASE_URL!);
+    const sql = postgres(process.env.DATABASE_URL!, { max: 1, idle_timeout: 10 });
     const [row] = await sql`SELECT config FROM scoring_config WHERE id = 1`;
     await sql.end();
     if (row?.config) {

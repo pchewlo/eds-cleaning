@@ -9,7 +9,7 @@ export async function GET(request: Request) {
   const reset = searchParams.get("reset") === "true";
 
   try {
-    const sql = postgres(url);
+    const sql = postgres(url, { max: 1, idle_timeout: 10 });
 
     if (migrate) {
       await sql`ALTER TABLE candidates ADD COLUMN IF NOT EXISTS cv_data text`;
