@@ -201,9 +201,70 @@ export async function POST(
         }
 
         updates.metadataJson = mergedMetadata;
+
+        // Recalculate score using existing commute + new experience
         if (shouldUpdateScore) {
-          updates.rankScore = String(s.overallScore / 10);
-          updates.rankReasoning = s.summary;
+          const { getScoringConfig } = await import("@/lib/scoring-config");
+          const config = await getScoringConfig();
+
+          // Use existing commute data if new data doesn't have it
+          const commuteData = mergedMetadata.commute || {};
+          const hasLic = commuteData.hasDriverLicence || false;
+          const commuteMin = hasLic
+            ? (commuteData.drivingMinutes ?? commuteData.estimatedMinutes)
+            : (commuteData.transitMinutes ?? commuteData.estimatedMinutes);
+
+          let commuteScore = 40;
+          if (commuteMin != null) {
+            if (commuteMin <= config.commute.excellent) commuteScore = 95;
+            else if (commuteMin <= config.commute.good) commuteScore = 85;
+            else if (commuteMin <= config.commute.acceptable) commuteScore = 70;
+            else if (commuteMin <= config.commute.marginal) commuteScore = 45;
+            else commuteScore = 20;
+          }
+          if (hasLic) commuteScore = Math.min(100, commuteScore + config.commute.licenceBonus);
+          else commuteScore = Math.max(0, commuteScore - config.commute.licenceBonus);
+
+          const expScore = s.experience?.score ?? 30;
+          const tenureAvg = s.tenure?.avgYearsPerRole ?? 0;
+          const tenureScore = tenureAvg >= config.tenure.longTenureYears ? 80 : tenureAvg >= config.tenure.jobHopperThreshold ? 60 : 30;
+          const reqChecks = s.requirementsMet || [];
+          const metCount = reqChecks.filter((r: { status: string }) => r.status === "met").length;
+          const reqScore = reqChecks.length > 0 ? (metCount / reqChecks.length) * 100 : 50;
+
+          const recalculated = Math.round(
+            commuteScore * config.weights.commute +
+            expScore * config.weights.experience +
+            tenureScore * config.weights.tenure +
+            reqScore * config.weights.requirements
+          );
+
+          const rec = recalculated >= 75 ? "strong" : recalculated >= 50 ? "consider" : "reject";
+
+          // Build proper summary
+          const strengths: string[] = [];
+          const weaknesses: string[] = [];
+          if (commuteScore >= 80) strengths.push("short commute");
+          else if (commuteScore < 50) weaknesses.push("long commute");
+          if (expScore >= 70) strengths.push("strong experience");
+          else if (expScore < 40) weaknesses.push("limited experience");
+          if (hasLic) strengths.push("drives");
+          else weaknesses.push("no licence");
+          const flags = s.redFlags || [];
+          if (flags.length > 0) weaknesses.push(flags[0]);
+
+          let summary: string;
+          if (rec === "strong") summary = `Strong: ${strengths.join(", ")}.`;
+          else if (rec === "reject") summary = `Reject: ${weaknesses.join(", ")}.`;
+          else {
+            const parts: string[] = [];
+            if (strengths.length) parts.push(`Pros: ${strengths.join(", ")}`);
+            if (weaknesses.length) parts.push(`Cons: ${weaknesses.join(", ")}`);
+            summary = parts.join(". ") + ".";
+          }
+
+          updates.rankScore = String(recalculated / 10);
+          updates.rankReasoning = summary;
           updates.rankFlags = s.redFlags;
           updates.rankedAt = new Date();
         }
