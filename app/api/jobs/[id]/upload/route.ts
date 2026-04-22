@@ -162,19 +162,54 @@ export async function POST(
       continue;
     }
 
-    // Dedup 2: name-only match (catches re-uploads with different phone formatting)
+    // Dedup 2: name-only match — UPDATE existing row if we have better data (CV)
     if (nameNorm.length > 2) {
       const existingByName = await db
-        .select({ id: candidates.id, name: candidates.name })
+        .select({ id: candidates.id, name: candidates.name, cvData: candidates.cvData })
         .from(candidates)
         .where(eq(candidates.jobId, jobId));
 
-      const nameMatch = existingByName.find((e) =>
-        (e.name || "").toLowerCase().trim().replace(/\s+/g, " ") === nameNorm
-      );
+      // Fuzzy name match: strip non-alpha, compare
+      const normAlpha = (x: string) => x.toLowerCase().replace(/[^a-z]/g, "");
+      const nameMatch = existingByName.find((e) => {
+        const eName = normAlpha(e.name || "");
+        const sName = normAlpha(s.candidateName || "");
+        return eName === sName || eName.includes(sName) || sName.includes(eName);
+      });
 
       if (nameMatch) {
-        duplicateCount++;
+        // If we have new CV data or a better score, UPDATE the existing row
+        const matchedPdf = pdfCandidates.find((p) =>
+          normAlpha(p.name) === normAlpha(s.candidateName || "")
+        );
+
+        const hasNewCvData = matchedPdf && !nameMatch.cvData;
+        const hasScore = s.overallScore > 0;
+
+        if (hasNewCvData || hasScore) {
+          // Merge — update existing candidate with CV data + new score
+          await db.update(candidates).set({
+            ...(matchedPdf ? { cvData: matchedPdf.base64, cvFilename: matchedPdf.filename, cvBlobUrl: `pdf:${matchedPdf.filename}` } : {}),
+            ...(hasScore ? {
+              rankScore: String(s.overallScore / 10),
+              rankReasoning: s.summary,
+              rankFlags: s.redFlags,
+              rankedAt: new Date(),
+              metadataJson: {
+                commute: s.commute,
+                experience: s.experience,
+                tenure: s.tenure,
+                requirementsMet: s.requirementsMet,
+                redFlags: s.redFlags,
+                postcode: s.candidatePostcode,
+                source: s.source,
+              },
+            } : {}),
+          }).where(eq(candidates.id, nameMatch.id));
+          newCount++; // Count as updated, not duplicate
+        } else {
+          duplicateCount++;
+        }
         continue;
       }
     }
