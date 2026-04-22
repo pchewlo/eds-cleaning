@@ -72,11 +72,31 @@ export async function POST(
       jobPostcode: job.location || "", requirements: [],
     });
   } else if (csvCandidates.length > 0) {
-    // CSV only — mark as unverified
-    scoredResults = csvCandidates.map((csv) => {
+    // CSV only — get Google Maps distances, mark as unverified score
+    const { getDistancesBatch } = await import("@/lib/distance");
+    const postcodes = csvCandidates.map((c) => getQualAnswer(c, "postcode") || c.location || "");
+    let distances: Awaited<ReturnType<typeof getDistancesBatch>> | null = null;
+    try {
+      distances = await getDistancesBatch(postcodes, job.location || "");
+    } catch (e) {
+      console.error("Distance lookup failed:", e);
+    }
+
+    scoredResults = csvCandidates.map((csv, i) => {
       const hasLicence = getQualAnswer(csv, "driving")?.toLowerCase() === "yes";
       const indeedYears = parseInt(getQualAnswer(csv, "cleaning experience") || "0") || 0;
       const postcode = getQualAnswer(csv, "postcode") || "";
+      const selfReported = getQualAnswer(csv, "travel") || getQualAnswer(csv, "long");
+      const selfMin = selfReported ? parseInt(selfReported) || null : null;
+      const dist = distances ? distances[i] : null;
+
+      const commuteReasonParts: string[] = [];
+      if (postcode) commuteReasonParts.push(`${postcode} → ${job.location || "job"}`);
+      if (selfMin != null) commuteReasonParts.push(`Self-reported: ${selfMin} min`);
+      if (dist?.drivingMinutes != null) commuteReasonParts.push(`Drive: ${dist.drivingMinutes} min`);
+      if (dist?.transitMinutes != null) commuteReasonParts.push(`Public transport: ${dist.transitMinutes} min`);
+      commuteReasonParts.push(hasLicence ? "Has driving licence" : "No driving licence");
+
       return {
         candidateName: csv.name,
         candidateEmail: csv.email,
@@ -84,7 +104,14 @@ export async function POST(
         candidatePostcode: postcode || null,
         overallScore: -1,
         recommendation: "reject" as const,
-        commute: { viable: false, estimatedMinutes: null, drivingMinutes: null, transitMinutes: null, hasDriverLicence: hasLicence, reasoning: "" },
+        commute: {
+          viable: false,
+          estimatedMinutes: selfMin,
+          drivingMinutes: dist?.drivingMinutes ?? null,
+          transitMinutes: dist?.transitMinutes ?? null,
+          hasDriverLicence: hasLicence,
+          reasoning: commuteReasonParts.join(". ") + ".",
+        },
         experience: { score: 0, yearsFromCv: 0, yearsFromIndeed: indeedYears, relevantRoles: csv.relevantExperience ? [csv.relevantExperience] : [], reasoning: `Claims ${indeedYears} years on Indeed — no CV to verify.` },
         tenure: { avgYearsPerRole: 0, reasoning: "No CV available." },
         requirementsMet: [] as Array<{ requirement: string; status: string; evidence: string }>,
