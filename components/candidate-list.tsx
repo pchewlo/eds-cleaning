@@ -126,7 +126,11 @@ export function CandidateList({ candidates, jobId }: Props) {
 function CandidateRow({ candidate: c }: { candidate: Candidate }) {
   const [expanded, setExpanded] = useState(false);
 
+  const source = c.metadata?.source as string | undefined;
   const isUnverified = c.score !== null && c.score < 0;
+  const missingLabel = isUnverified
+    ? source === "csv_only" ? "No CV attached" : source === "pdf_only" ? "No metadata found" : null
+    : null;
   const score100 = isUnverified ? 0 : (c.score ?? 0) * 10;
   const scoreBg = isUnverified
     ? "bg-slate-100 text-slate-400"
@@ -161,11 +165,23 @@ function CandidateRow({ candidate: c }: { candidate: Candidate }) {
           {isUnverified ? "N/A" : c.score !== null ? c.score.toFixed(1) : "—"}
         </span>
 
-        {/* Name */}
+        {/* Name + status label */}
         <div className="flex-1 min-w-0">
-          <span className="font-medium text-[13px] text-slate-900 truncate block">
-            {c.name || "Unknown"}
-          </span>
+          <div className="flex items-center gap-2">
+            <span className="font-medium text-[13px] text-slate-900 truncate">
+              {c.name || "Unknown"}
+            </span>
+            {missingLabel && (
+              <span className="flex-shrink-0 px-1.5 py-0.5 bg-slate-100 text-slate-500 rounded text-[10px] font-medium">
+                {missingLabel}
+              </span>
+            )}
+            {c.digestSent && (
+              <span className="flex-shrink-0 px-2 py-0.5 bg-emerald-50 text-emerald-700 rounded text-[10px] font-medium">
+                ✉️ emailed
+              </span>
+            )}
+          </div>
         </div>
 
         {/* Commute */}
@@ -184,13 +200,6 @@ function CandidateRow({ candidate: c }: { candidate: Candidate }) {
           >
             {c.phone.replace(/^'/, "")}
           </a>
-        )}
-
-        {/* Emailed status */}
-        {c.digestSent && (
-          <span className="flex-shrink-0 px-2 py-0.5 bg-emerald-50 text-emerald-700 rounded text-[10px] font-medium">
-            ✉️ emailed
-          </span>
         )}
 
         <svg
