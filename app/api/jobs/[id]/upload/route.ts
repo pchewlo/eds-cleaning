@@ -107,7 +107,7 @@ export async function POST(
 
   // Load existing candidates for this job
   const existingCandidates = await db
-    .select({ id: candidates.id, name: candidates.name, cvData: candidates.cvData })
+    .select({ id: candidates.id, name: candidates.name, cvData: candidates.cvData, metadataJson: candidates.metadataJson })
     .from(candidates)
     .where(eq(candidates.jobId, jobId));
 
@@ -148,11 +148,26 @@ export async function POST(
 
       // Update score if this is a real score (not -1/unverified)
       if (s.overallScore > 0) {
+        // Merge metadata: keep existing commute/postcode (from CSV), update experience/tenure (from CV)
+        const existingMeta = (existing.metadataJson || {}) as Record<string, unknown>;
+        const mergedMetadata = {
+          ...existingMeta,           // Keep everything from CSV (commute, postcode, etc.)
+          experience: s.experience,  // Override with CV-verified experience
+          tenure: s.tenure,          // Override with CV-verified tenure
+          requirementsMet: s.requirementsMet,
+          redFlags: s.redFlags,
+          source: "combined",
+        };
+        // Only override commute if the new data actually has it (not empty)
+        if (s.commute.drivingMinutes != null || s.commute.transitMinutes != null) {
+          mergedMetadata.commute = s.commute;
+        }
+
         updates.rankScore = String(s.overallScore / 10);
         updates.rankReasoning = s.summary;
         updates.rankFlags = s.redFlags;
         updates.rankedAt = new Date();
-        updates.metadataJson = metadataJson;
+        updates.metadataJson = mergedMetadata;
       }
 
       // Update contact info if we have it and they don't
