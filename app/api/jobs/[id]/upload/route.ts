@@ -14,14 +14,6 @@ function getQualAnswer(c: { qualifications: Array<{ question: string; answer: st
   return c.qualifications.find(q => q.question.toLowerCase().includes(keyword.toLowerCase()))?.answer;
 }
 
-function toV1Job(dbJob: { id: string; title: string; location: string | null; description: string }): Job {
-  return {
-    id: dbJob.id, url: "", title: dbJob.title, postcode: dbJob.location || "",
-    location: dbJob.location || "", hourlyRate: "", hoursPerWeek: 0,
-    shiftPattern: "", shiftType: "unknown", requirements: [], fullDescription: dbJob.description,
-  };
-}
-
 export async function POST(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -32,23 +24,11 @@ export async function POST(
   if (!job) return Response.json({ error: "Job not found" }, { status: 404 });
 
   const formData = await request.formData();
-
-  // Get CSV file (single)
   const csvFile = formData.get("csv") as File | null;
-
-  // Get CV files (multiple)
   const cvFiles: File[] = [];
   for (const [key, value] of formData.entries()) {
-    if (key === "cvs" && value instanceof File) {
+    if ((key === "cvs" || key === "files") && value instanceof File && !value.name.toLowerCase().endsWith(".csv")) {
       cvFiles.push(value);
-    }
-    // Backwards compat: also accept "files" key
-    if (key === "files" && value instanceof File) {
-      if (value.name.toLowerCase().endsWith(".csv")) {
-        // treat as CSV
-      } else {
-        cvFiles.push(value);
-      }
     }
   }
 
@@ -59,12 +39,12 @@ export async function POST(
   let newCount = 0;
   let duplicateCount = 0;
 
-  // Parse CSV if provided
+  // Parse CSV
   const csvCandidates = csvFile
     ? parseCsvCandidates(Buffer.from(await csvFile.arrayBuffer()).toString("utf-8"))
     : [];
 
-  // Extract text from PDFs and keep raw data for storage
+  // Extract PDF text + store raw data
   const pdfCandidates: Array<{ filename: string; name: string; cvText: string; base64: string }> = [];
   for (const file of cvFiles) {
     try {
@@ -77,71 +57,26 @@ export async function POST(
         .replace(/([a-z])([A-Z])/g, "$1 $2")
         .replace(/([A-Z]+)([A-Z][a-z])/g, "$1 $2")
         .trim();
-
       pdfCandidates.push({ filename: file.name, name: nameFromFile, cvText: text, base64 });
     } catch (e) {
-      console.error(`Failed to extract text from ${file.name}:`, e);
+      console.error(`Failed to extract ${file.name}:`, e);
     }
   }
 
-  // If we have PDFs but no CSV in this upload, check if there are existing CSV candidates
-  // in the DB that we can match against (user uploaded CSV first, CVs second)
-  let effectiveCsvCandidates = csvCandidates;
-  if (csvCandidates.length === 0 && pdfCandidates.length > 0) {
-    // Load existing candidates from DB and reconstruct CSV-like data
-    const existingCandidates = await db
-      .select()
-      .from(candidates)
-      .where(eq(candidates.jobId, jobId));
-
-    if (existingCandidates.length > 0) {
-      effectiveCsvCandidates = existingCandidates.map((c) => {
-        const meta = c.metadataJson as Record<string, unknown> | null;
-        const commute = meta?.commute as Record<string, unknown> | undefined;
-        return {
-          name: c.name || "",
-          email: c.email || "",
-          phone: c.phone || "",
-          status: "",
-          location: "",
-          relevantExperience: "",
-          education: "",
-          jobTitle: "",
-          jobLocation: "",
-          date: "",
-          source: "",
-          qualifications: [
-            ...(commute?.hasDriverLicence ? [{ question: "driving licence", answer: "Yes", match: "" }] : []),
-            ...(meta?.postcode ? [{ question: "postcode", answer: String(meta.postcode), match: "" }] : []),
-            ...(commute?.estimatedMinutes != null ? [{ question: "travel time", answer: `${commute.estimatedMinutes} min`, match: "" }] : []),
-          ],
-        };
-      });
-    }
-  }
-
-  // Score based on what we have
+  // Score
   let scoredResults;
-
-  if (effectiveCsvCandidates.length > 0 && pdfCandidates.length > 0) {
-    // Combined scoring — best accuracy
+  if (csvCandidates.length > 0 && pdfCandidates.length > 0) {
     scoredResults = await scoreCombined({
-      csvCandidates: effectiveCsvCandidates,
-      pdfCandidates,
-      jobTitle: job.title,
-      jobDescription: job.description,
-      jobPostcode: job.location || "",
-      requirements: [],
+      csvCandidates, pdfCandidates,
+      jobTitle: job.title, jobDescription: job.description,
+      jobPostcode: job.location || "", requirements: [],
     });
   } else if (csvCandidates.length > 0) {
-    // CSV only — algorithmic scoring
-    const v1Job = toV1Job(job);
-    // CSV only — no CVs to verify, mark as unverified
+    // CSV only — mark as unverified
     scoredResults = csvCandidates.map((csv) => {
       const hasLicence = getQualAnswer(csv, "driving")?.toLowerCase() === "yes";
       const indeedYears = parseInt(getQualAnswer(csv, "cleaning experience") || "0") || 0;
       const postcode = getQualAnswer(csv, "postcode") || "";
-      const selfReported = getQualAnswer(csv, "travel") || getQualAnswer(csv, "long") || null;
       return {
         candidateName: csv.name,
         candidateEmail: csv.email,
@@ -149,139 +84,116 @@ export async function POST(
         candidatePostcode: postcode || null,
         overallScore: -1,
         recommendation: "reject" as const,
-        commute: {
-          viable: false, estimatedMinutes: selfReported ? parseInt(selfReported) || null : null,
-          drivingMinutes: null, transitMinutes: null, hasDriverLicence: hasLicence,
-          reasoning: `${postcode || csv.location} → job. Self-reported: ${selfReported || "N/A"}. ${hasLicence ? "Has" : "No"} licence.`,
-        },
-        experience: {
-          score: 0, yearsFromCv: 0, yearsFromIndeed: indeedYears,
-          relevantRoles: csv.relevantExperience ? [csv.relevantExperience] : [],
-          reasoning: `Claims ${indeedYears} years on Indeed — no CV to verify.`,
-        },
+        commute: { viable: false, estimatedMinutes: null, drivingMinutes: null, transitMinutes: null, hasDriverLicence: hasLicence, reasoning: "" },
+        experience: { score: 0, yearsFromCv: 0, yearsFromIndeed: indeedYears, relevantRoles: csv.relevantExperience ? [csv.relevantExperience] : [], reasoning: `Claims ${indeedYears} years on Indeed — no CV to verify.` },
         tenure: { avgYearsPerRole: 0, reasoning: "No CV available." },
-        requirementsMet: [],
+        requirementsMet: [] as Array<{ requirement: string; status: string; evidence: string }>,
         redFlags: ["No CV uploaded — cannot verify experience"],
         summary: `No CV to verify. Indeed: ${indeedYears}yr claimed, ${hasLicence ? "drives" : "no licence"}.`,
         source: "csv_only" as const,
       };
     });
   } else {
-    // PDFs only — Claude scoring without metadata
+    // PDFs only
     scoredResults = await scoreCombined({
-      csvCandidates: [],
-      pdfCandidates,
-      jobTitle: job.title,
-      jobDescription: job.description,
-      jobPostcode: job.location || "",
-      requirements: [],
+      csvCandidates: [], pdfCandidates,
+      jobTitle: job.title, jobDescription: job.description,
+      jobPostcode: job.location || "", requirements: [],
     });
   }
 
-  // Insert into DB
+  // Normalise name for matching
+  const normName = (x: string) => x.toLowerCase().replace(/[^a-z]/g, "");
+
+  // Load existing candidates for this job
+  const existingCandidates = await db
+    .select({ id: candidates.id, name: candidates.name, cvData: candidates.cvData })
+    .from(candidates)
+    .where(eq(candidates.jobId, jobId));
+
+  // Insert or update each scored candidate
   for (const s of scoredResults) {
-    const nameNorm = (s.candidateName || "").toLowerCase().trim().replace(/\s+/g, " ");
-    const phoneNorm = (s.candidatePhone || "").replace(/[^0-9]/g, "");
-    const fileHash = createHash("sha256")
-      .update(`${nameNorm}:${phoneNorm}:${jobId}`)
-      .digest("hex");
+    const sName = normName(s.candidateName || "");
+    if (sName.length < 2) continue;
 
-    // Dedup 1: hash match (name + phone)
-    const [hashMatch] = await db
-      .select({ id: candidates.id })
-      .from(candidates)
-      .where(and(eq(candidates.jobId, jobId), eq(candidates.fileHash, fileHash)))
-      .limit(1);
+    // Find matching PDF
+    const matchedPdf = pdfCandidates.find((p) => normName(p.name) === sName);
 
-    if (hashMatch) {
-      duplicateCount++;
-      continue;
-    }
+    // Check if candidate already exists in DB
+    const existing = existingCandidates.find((e) => {
+      const eName = normName(e.name || "");
+      return eName === sName || eName.includes(sName) || sName.includes(eName);
+    });
 
-    // Dedup 2: name-only match — UPDATE existing row if we have better data (CV)
-    if (nameNorm.length > 2) {
-      const existingByName = await db
-        .select({ id: candidates.id, name: candidates.name, cvData: candidates.cvData })
-        .from(candidates)
-        .where(eq(candidates.jobId, jobId));
+    const metadataJson = {
+      commute: s.commute,
+      experience: s.experience,
+      tenure: s.tenure,
+      requirementsMet: s.requirementsMet,
+      redFlags: s.redFlags,
+      postcode: s.candidatePostcode,
+      source: s.source,
+    };
 
-      // Fuzzy name match: strip non-alpha, compare
-      const normAlpha = (x: string) => x.toLowerCase().replace(/[^a-z]/g, "");
-      const nameMatch = existingByName.find((e) => {
-        const eName = normAlpha(e.name || "");
-        const sName = normAlpha(s.candidateName || "");
-        return eName === sName || eName.includes(sName) || sName.includes(eName);
-      });
+    if (existing) {
+      // UPDATE existing — merge CV data and score if we have better info
+      const updates: Record<string, unknown> = {};
 
-      if (nameMatch) {
-        // If we have new CV data or a better score, UPDATE the existing row
-        const matchedPdf = pdfCandidates.find((p) =>
-          normAlpha(p.name) === normAlpha(s.candidateName || "")
-        );
+      // Add CV data if we have it and they don't
+      if (matchedPdf && !existing.cvData) {
+        updates.cvData = matchedPdf.base64;
+        updates.cvFilename = matchedPdf.filename;
+        updates.cvBlobUrl = `pdf:${matchedPdf.filename}`;
+      }
 
-        const hasNewCvData = matchedPdf && !nameMatch.cvData;
-        const hasScore = s.overallScore > 0;
+      // Update score if this is a real score (not -1/unverified)
+      if (s.overallScore > 0) {
+        updates.rankScore = String(s.overallScore / 10);
+        updates.rankReasoning = s.summary;
+        updates.rankFlags = s.redFlags;
+        updates.rankedAt = new Date();
+        updates.metadataJson = metadataJson;
+      }
 
-        if (hasNewCvData || hasScore) {
-          // Merge — update existing candidate with CV data + new score
-          await db.update(candidates).set({
-            ...(matchedPdf ? { cvData: matchedPdf.base64, cvFilename: matchedPdf.filename, cvBlobUrl: `pdf:${matchedPdf.filename}` } : {}),
-            ...(hasScore ? {
-              rankScore: String(s.overallScore / 10),
-              rankReasoning: s.summary,
-              rankFlags: s.redFlags,
-              rankedAt: new Date(),
-              metadataJson: {
-                commute: s.commute,
-                experience: s.experience,
-                tenure: s.tenure,
-                requirementsMet: s.requirementsMet,
-                redFlags: s.redFlags,
-                postcode: s.candidatePostcode,
-                source: s.source,
-              },
-            } : {}),
-          }).where(eq(candidates.id, nameMatch.id));
-          newCount++; // Count as updated, not duplicate
-        } else {
-          duplicateCount++;
-        }
-        continue;
+      // Update contact info if we have it and they don't
+      if (s.candidateEmail) updates.email = s.candidateEmail;
+      if (s.candidatePhone) updates.phone = s.candidatePhone;
+
+      if (Object.keys(updates).length > 0) {
+        await db.update(candidates).set(updates).where(eq(candidates.id, existing.id));
+        newCount++;
+      } else {
+        duplicateCount++;
+      }
+    } else {
+      // INSERT new candidate
+      const fileHash = createHash("sha256")
+        .update(`${sName}:${jobId}`)
+        .digest("hex");
+
+      try {
+        await db.insert(candidates).values({
+          jobId,
+          name: s.candidateName,
+          email: s.candidateEmail,
+          phone: s.candidatePhone,
+          cvBlobUrl: matchedPdf ? `pdf:${matchedPdf.filename}` : `scored:${s.source}`,
+          cvData: matchedPdf?.base64 || null,
+          cvFilename: matchedPdf?.filename || null,
+          cvText: null,
+          fileHash,
+          metadataJson,
+          rankScore: String(s.overallScore / 10),
+          rankReasoning: s.summary,
+          rankFlags: s.redFlags,
+          rankedAt: new Date(),
+        });
+        newCount++;
+      } catch (e) {
+        // Unique constraint violation = duplicate
+        duplicateCount++;
       }
     }
-
-    // Find matching PDF for this candidate to store CV data
-    const matchedPdf = pdfCandidates.find((p) => {
-      const norm = (x: string) => x.toLowerCase().replace(/[^a-z]/g, "");
-      return norm(p.name) === norm(s.candidateName || "");
-    });
-
-    await db.insert(candidates).values({
-      jobId,
-      name: s.candidateName,
-      email: s.candidateEmail,
-      phone: s.candidatePhone,
-      cvBlobUrl: matchedPdf ? `pdf:${matchedPdf.filename}` : `scored:${s.source}`,
-      cvData: matchedPdf?.base64 || null,
-      cvFilename: matchedPdf?.filename || null,
-      cvText: null,
-      fileHash,
-      metadataJson: {
-        commute: s.commute,
-        experience: s.experience,
-        tenure: s.tenure,
-        requirementsMet: s.requirementsMet,
-        redFlags: s.redFlags,
-        postcode: s.candidatePostcode,
-        source: s.source,
-      },
-      rankScore: String(s.overallScore / 10),
-      rankReasoning: s.summary,
-      rankFlags: s.redFlags,
-      rankedAt: new Date(),
-    });
-
-    newCount++;
   }
 
   // Create upload record
@@ -295,7 +207,7 @@ export async function POST(
     try {
       const allCandidates = await db.select().from(candidates).where(eq(candidates.jobId, jobId));
       const ranked = allCandidates
-        .filter((c) => c.rankScore !== null)
+        .filter((c) => c.rankScore && parseFloat(c.rankScore) >= 7.5)
         .map((c) => ({
           id: c.id, name: c.name, phone: c.phone, email: c.email,
           score: parseFloat(c.rankScore || "0"),
@@ -303,25 +215,28 @@ export async function POST(
           flags: (c.rankFlags as string[]) || [],
         }));
 
-      const appUrl = process.env.AUTH_URL || `https://${process.env.VERCEL_URL || "localhost:3000"}`;
-      await sendDigestEmail({
-        to: job.recipientEmail, jobTitle: job.title, jobLocation: job.location,
-        jobId: job.id, newCount, duplicateCount, candidates: ranked, appUrl,
-      });
-      await db.update(uploads).set({ digestSentAt: new Date() }).where(eq(uploads.id, upload.id));
+      if (ranked.length > 0) {
+        const appUrl = process.env.AUTH_URL || `https://${process.env.VERCEL_URL || "localhost:3000"}`;
+        await sendDigestEmail({
+          to: job.recipientEmail, jobTitle: job.title, jobLocation: job.location,
+          jobId: job.id, newCount, duplicateCount, candidates: ranked, appUrl,
+        });
+        await db.update(uploads).set({ digestSentAt: new Date() }).where(eq(uploads.id, upload.id));
+      }
     } catch (e) {
       console.error("Digest email failed:", e);
       await db.update(uploads).set({ digestError: e instanceof Error ? e.message : "Unknown" }).where(eq(uploads.id, upload.id));
     }
   }
 
+  // Return all candidates for this job
   const allCandidates = await db.select().from(candidates).where(eq(candidates.jobId, jobId));
 
   return Response.json({
     newCount,
     duplicateCount,
     candidates: allCandidates.sort(
-      (a, b) => parseFloat(b.rankScore || "0") - parseFloat(a.rankScore || "0")
+      (a, b) => parseFloat(b.rankScore || "-1") - parseFloat(a.rankScore || "-1")
     ),
   });
 }
