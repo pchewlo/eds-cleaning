@@ -45,6 +45,9 @@ export interface ScoringConfig {
 
   // Red flags to ignore
   redFlagsToIgnore: string[];
+
+  // AI extraction prompt — controls how CVs are read
+  extractionPrompt: string;
 }
 
 export const DEFAULT_CONFIG: ScoringConfig = {
@@ -119,9 +122,41 @@ export const DEFAULT_CONFIG: ScoringConfig = {
     "lack of variety",
     "limited roles",
   ],
+
+  extractionPrompt: `You extract structured work history from CVs. Return JSON only, no markdown fencing.
+
+For each candidate extract:
+- id: the candidate ID string
+- name: full name
+- roles: array of ALL jobs listed, each with {title, employer, startYear, endYear, isCleaning: boolean, isRelevant: boolean}
+  - isCleaning = true for: cleaning, janitorial, housekeeping, domestic assistant, caretaker roles
+  - isRelevant = true for: care worker, school worker, NHS, hospitality, retail, warehouse, kitchen porter AND all cleaning roles
+- hasDriverLicence: boolean | null (if mentioned in CV)
+- postcode: string | null (if mentioned)
+- redFlags: string[] — ONLY flag genuinely concerning issues:
+  - Unexplained gaps of 2+ years
+  - Overlapping employment dates
+  - Claims that contradict other parts of the CV
+  - DO NOT flag long tenure in one role — that is a POSITIVE, not a red flag
+  - DO NOT flag having only one or two roles — stability is good
+  - DO NOT flag lack of variety — we want people who stay put
+
+Be thorough — list EVERY role from the CV, not just relevant ones. Include employer name and years.`,
 };
 
-// Load config — for now from defaults, later could be from DB
-export function getScoringConfig(): ScoringConfig {
+// Load config from DB, falling back to defaults
+export async function getScoringConfig(): Promise<ScoringConfig> {
+  try {
+    const postgres = (await import("postgres")).default;
+    const sql = postgres(process.env.DATABASE_URL!);
+    const [row] = await sql`SELECT config FROM scoring_config WHERE id = 1`;
+    await sql.end();
+    if (row?.config) {
+      // Merge with defaults so new fields always have values
+      return { ...DEFAULT_CONFIG, ...row.config };
+    }
+  } catch {
+    // Table doesn't exist or DB not available
+  }
   return DEFAULT_CONFIG;
 }

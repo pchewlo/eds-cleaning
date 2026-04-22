@@ -1,6 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { CsvCandidate, candidateToText } from "./csv-parser";
 import { getDistancesBatch, DistanceResult } from "./distance";
+import { getScoringConfig, ScoringConfig, DEFAULT_CONFIG } from "./scoring-config";
 
 const client = new Anthropic();
 
@@ -87,29 +88,12 @@ type ClaudeResult = {
   requirementChecks: Array<{ requirement: string; status: string; evidence: string }>;
 };
 
-const HAIKU_EXTRACT_SYSTEM = `You extract structured work history from CVs. Return JSON only, no markdown fencing.
-
-For each candidate extract:
-- id: the candidate ID string
-- name: full name
-- roles: array of ALL jobs listed, each with {title, employer, startYear, endYear, isCleaning: boolean, isRelevant: boolean}
-  - isCleaning = true for: cleaning, janitorial, housekeeping, domestic assistant, caretaker roles
-  - isRelevant = true for: care worker, school worker, NHS, hospitality, retail, warehouse, kitchen porter AND all cleaning roles
-- hasDriverLicence: boolean | null (if mentioned in CV)
-- postcode: string | null (if mentioned)
-- redFlags: string[] — ONLY flag genuinely concerning issues:
-  - Unexplained gaps of 2+ years
-  - Overlapping employment dates
-  - Claims that contradict other parts of the CV
-  - DO NOT flag long tenure in one role — that is a POSITIVE, not a red flag
-  - DO NOT flag having only one or two roles — stability is good
-  - DO NOT flag lack of variety — we want people who stay put
-
-Be thorough — list EVERY role from the CV, not just relevant ones. Include employer name and years.`;
+// Prompt loaded from config at runtime
 
 // Batch extract structured data from CVs using Haiku (fast + cheap)
 async function extractCvDataBatch(
-  batch: Array<{ id: string; cvText: string }>
+  batch: Array<{ id: string; cvText: string }>,
+  extractionPrompt: string
 ): Promise<Array<{
   id: string;
   name: string;
@@ -126,7 +110,7 @@ async function extractCvDataBatch(
     model: "claude-haiku-4-5-20251001",
     max_tokens: 4000,
     temperature: 0,
-    system: HAIKU_EXTRACT_SYSTEM,
+    system: extractionPrompt,
     messages: [{
       role: "user",
       content: `Extract work history from these ${batch.length} CVs. Return a JSON array.\n\n${candidateBlocks}`,
@@ -214,7 +198,8 @@ function scoreCvData(extracted: {
 
 // Extract + score all CVs: Haiku for extraction (fast), algorithmic for scoring (instant)
 async function scoreAllCvs(
-  candidates: Array<{ id: string; cvText: string }>
+  candidates: Array<{ id: string; cvText: string }>,
+  config: ScoringConfig
 ): Promise<Map<string, ClaudeResult>> {
   const results = new Map<string, ClaudeResult>();
   const BATCH_SIZE = 5;  // Haiku can handle bigger batches
@@ -228,7 +213,7 @@ async function scoreAllCvs(
   for (let i = 0; i < batches.length; i += CONCURRENCY) {
     const concurrent = batches.slice(i, i + CONCURRENCY).map(async (batch) => {
       try {
-        const extracted = await extractCvDataBatch(batch);
+        const extracted = await extractCvDataBatch(batch, config.extractionPrompt);
         for (const ex of extracted) {
           const scored = scoreCvData(ex);
           scored.id = ex.id;
@@ -263,6 +248,9 @@ export async function scoreCombined(params: {
 }): Promise<CombinedResult[]> {
   const { csvCandidates, pdfCandidates, jobTitle, jobDescription, jobPostcode, requirements } = params;
 
+  // Load scoring config
+  const config = await getScoringConfig();
+
   // 1. Get Google Maps distances for all CSV candidates
   const postcodes = csvCandidates.map(
     (c) => getQualificationAnswer(c, "postcode") || c.location || ""
@@ -277,7 +265,8 @@ export async function scoreCombined(params: {
   // 2. Extract data from all PDFs via Haiku (fast) + score algorithmically
   const claudeResults = pdfCandidates.length > 0
     ? await scoreAllCvs(
-        pdfCandidates.map((p, i) => ({ id: String(i), cvText: p.cvText }))
+        pdfCandidates.map((p, i) => ({ id: String(i), cvText: p.cvText })),
+        config
       )
     : new Map<string, ClaudeResult>();
 
@@ -310,14 +299,14 @@ export async function scoreCombined(params: {
     let commuteScore = 40;
     let commuteViable = false;
     if (commuteMin !== null) {
-      if (commuteMin <= 15) { commuteScore = 95; commuteViable = true; }
-      else if (commuteMin <= 20) { commuteScore = 85; commuteViable = true; }
-      else if (commuteMin <= 30) { commuteScore = 70; commuteViable = true; }
-      else if (commuteMin <= 45) { commuteScore = 45; commuteViable = false; }
+      if (commuteMin <= config.commute.excellent) { commuteScore = 95; commuteViable = true; }
+      else if (commuteMin <= config.commute.good) { commuteScore = 85; commuteViable = true; }
+      else if (commuteMin <= config.commute.acceptable) { commuteScore = 70; commuteViable = true; }
+      else if (commuteMin <= config.commute.marginal) { commuteScore = 45; commuteViable = false; }
       else { commuteScore = 20; commuteViable = false; }
     }
-    if (hasLicence) commuteScore = Math.min(100, commuteScore + 10);
-    else commuteScore = Math.max(0, commuteScore - 10);
+    if (hasLicence) commuteScore = Math.min(100, commuteScore + config.commute.licenceBonus);
+    else commuteScore = Math.max(0, commuteScore - config.commute.licenceBonus);
 
     const expScore = claudeResult?.experienceScore ?? 30;
     const indeedYears = csvMatch
@@ -334,12 +323,11 @@ export async function scoreCombined(params: {
       ? (claudeResult.tenureAvgYears >= 3 ? 80 : claudeResult.tenureAvgYears >= 1.5 ? 60 : 30)
       : 50;
 
-    // Overall: Commute 25%, Experience 35%, Tenure 25%, Requirements 15%
     const overall = Math.round(
-      commuteScore * 0.25 +
-      expScore * 0.35 +
-      tenureScore * 0.25 +
-      reqScore * 0.15
+      commuteScore * config.weights.commute +
+      expScore * config.weights.experience +
+      tenureScore * config.weights.tenure +
+      reqScore * config.weights.requirements
     );
 
     const recommendation = overall >= 75 ? "strong" : overall >= 50 ? "consider" : "reject";
@@ -402,14 +390,14 @@ export async function scoreCombined(params: {
     let commuteScore = 40;
     let commuteViable = false;
     if (commuteMin !== null) {
-      if (commuteMin <= 15) { commuteScore = 95; commuteViable = true; }
-      else if (commuteMin <= 20) { commuteScore = 85; commuteViable = true; }
-      else if (commuteMin <= 30) { commuteScore = 70; commuteViable = true; }
-      else if (commuteMin <= 45) { commuteScore = 45; commuteViable = false; }
+      if (commuteMin <= config.commute.excellent) { commuteScore = 95; commuteViable = true; }
+      else if (commuteMin <= config.commute.good) { commuteScore = 85; commuteViable = true; }
+      else if (commuteMin <= config.commute.acceptable) { commuteScore = 70; commuteViable = true; }
+      else if (commuteMin <= config.commute.marginal) { commuteScore = 45; commuteViable = false; }
       else { commuteScore = 20; commuteViable = false; }
     }
-    if (hasLicence) commuteScore = Math.min(100, commuteScore + 10);
-    else commuteScore = Math.max(0, commuteScore - 10);
+    if (hasLicence) commuteScore = Math.min(100, commuteScore + config.commute.licenceBonus);
+    else commuteScore = Math.max(0, commuteScore - config.commute.licenceBonus);
 
     // No CV — cannot score reliably. Set to -1 to sort to bottom.
     const commuteReasonParts = [];

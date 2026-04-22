@@ -84,13 +84,49 @@ export async function POST(
     }
   }
 
+  // If we have PDFs but no CSV in this upload, check if there are existing CSV candidates
+  // in the DB that we can match against (user uploaded CSV first, CVs second)
+  let effectiveCsvCandidates = csvCandidates;
+  if (csvCandidates.length === 0 && pdfCandidates.length > 0) {
+    // Load existing candidates from DB and reconstruct CSV-like data
+    const existingCandidates = await db
+      .select()
+      .from(candidates)
+      .where(eq(candidates.jobId, jobId));
+
+    if (existingCandidates.length > 0) {
+      effectiveCsvCandidates = existingCandidates.map((c) => {
+        const meta = c.metadataJson as Record<string, unknown> | null;
+        const commute = meta?.commute as Record<string, unknown> | undefined;
+        return {
+          name: c.name || "",
+          email: c.email || "",
+          phone: c.phone || "",
+          status: "",
+          location: "",
+          relevantExperience: "",
+          education: "",
+          jobTitle: "",
+          jobLocation: "",
+          date: "",
+          source: "",
+          qualifications: [
+            ...(commute?.hasDriverLicence ? [{ question: "driving licence", answer: "Yes", match: "" }] : []),
+            ...(meta?.postcode ? [{ question: "postcode", answer: String(meta.postcode), match: "" }] : []),
+            ...(commute?.estimatedMinutes != null ? [{ question: "travel time", answer: `${commute.estimatedMinutes} min`, match: "" }] : []),
+          ],
+        };
+      });
+    }
+  }
+
   // Score based on what we have
   let scoredResults;
 
-  if (csvCandidates.length > 0 && pdfCandidates.length > 0) {
+  if (effectiveCsvCandidates.length > 0 && pdfCandidates.length > 0) {
     // Combined scoring — best accuracy
     scoredResults = await scoreCombined({
-      csvCandidates,
+      csvCandidates: effectiveCsvCandidates,
       pdfCandidates,
       jobTitle: job.title,
       jobDescription: job.description,
