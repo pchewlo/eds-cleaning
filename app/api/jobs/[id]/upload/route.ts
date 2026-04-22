@@ -107,7 +107,7 @@ export async function POST(
 
   // Load existing candidates for this job
   const existingCandidates = await db
-    .select({ id: candidates.id, name: candidates.name, cvData: candidates.cvData, metadataJson: candidates.metadataJson })
+    .select({ id: candidates.id, name: candidates.name, cvData: candidates.cvData, metadataJson: candidates.metadataJson, rankScore: candidates.rankScore })
     .from(candidates)
     .where(eq(candidates.jobId, jobId));
 
@@ -149,7 +149,13 @@ export async function POST(
 
       // Update score if this is a real score (not -1/unverified)
       if (s.overallScore > 0) {
-        // Merge metadata: keep existing commute/postcode (from CSV), update experience/tenure (from CV)
+        const existingScore = existing.rankScore ? parseFloat(existing.rankScore) * 10 : 0;
+
+        // Don't downgrade — if existing score is higher and was already combined, keep it
+        // Only update if: new score is higher, OR existing had no real score, OR we have new CV data
+        const shouldUpdateScore = s.overallScore >= existingScore || existingScore <= 0 || (matchedPdf && !existing.cvData);
+
+        // Always merge metadata to add CV experience data
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const existingMeta = (existing.metadataJson || {}) as any;
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -167,11 +173,13 @@ export async function POST(
           mergedMetadata.commute = newData.commute;
         }
 
-        updates.rankScore = String(s.overallScore / 10);
-        updates.rankReasoning = s.summary;
-        updates.rankFlags = s.redFlags;
-        updates.rankedAt = new Date();
         updates.metadataJson = mergedMetadata;
+        if (shouldUpdateScore) {
+          updates.rankScore = String(s.overallScore / 10);
+          updates.rankReasoning = s.summary;
+          updates.rankFlags = s.redFlags;
+          updates.rankedAt = new Date();
+        }
       }
 
       // Update contact info if we have it and they don't

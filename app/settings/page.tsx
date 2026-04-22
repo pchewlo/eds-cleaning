@@ -10,7 +10,16 @@ export default function SettingsPage() {
   const [saved, setSaved] = useState(false);
 
   useEffect(() => {
-    fetch("/api/settings").then((r) => r.json()).then(setConfig);
+    fetch("/api/settings")
+      .then((r) => r.json())
+      .then((data) => {
+        if (data && data.weights) {
+          setConfig(data);
+        } else {
+          console.error("Invalid config:", data);
+        }
+      })
+      .catch((e) => console.error("Failed to load settings:", e));
   }, []);
 
   const save = async () => {
