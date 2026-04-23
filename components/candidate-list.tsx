@@ -128,11 +128,14 @@ function CandidateRow({ candidate: c }: { candidate: Candidate }) {
 
   const source = c.metadata?.source as string | undefined;
   const isUnverified = c.score !== null && c.score < 0;
-  const missingLabel = isUnverified
-    ? source === "csv_only" ? "No CV attached" : source === "pdf_only" ? "No metadata found" : null
+  const isIncomplete = source === "csv_only" || source === "pdf_only";
+  const missingLabel =
+    source === "csv_only" ? "No CV attached"
+    : source === "pdf_only" ? "No metadata"
     : null;
-  const score100 = isUnverified ? 0 : (c.score ?? 0) * 10;
-  const scoreBg = isUnverified
+  const showNA = isUnverified || isIncomplete;
+  const score100 = showNA ? 0 : (c.score ?? 0) * 10;
+  const scoreBg = showNA
     ? "bg-slate-100 text-slate-400"
     : score100 >= 75
     ? "bg-emerald-100 text-emerald-700"
@@ -162,7 +165,7 @@ function CandidateRow({ candidate: c }: { candidate: Candidate }) {
       >
         {/* Score */}
         <span className={`flex-shrink-0 w-10 h-10 rounded-lg flex items-center justify-center text-sm font-semibold ${scoreBg}`}>
-          {isUnverified ? "N/A" : c.score !== null ? c.score.toFixed(1) : "—"}
+          {showNA ? "N/A" : c.score !== null ? c.score.toFixed(1) : "—"}
         </span>
 
         {/* Name + status label */}
@@ -172,7 +175,9 @@ function CandidateRow({ candidate: c }: { candidate: Candidate }) {
               {c.name || "Unknown"}
             </span>
             {missingLabel && (
-              <span className="flex-shrink-0 px-1.5 py-0.5 bg-slate-100 text-slate-500 rounded text-[10px] font-medium">
+              <span className={`flex-shrink-0 px-1.5 py-0.5 rounded text-[10px] font-medium ${
+                source === "csv_only" ? "bg-slate-100 text-slate-500" : "bg-amber-50 text-amber-600"
+              }`}>
                 {missingLabel}
               </span>
             )}

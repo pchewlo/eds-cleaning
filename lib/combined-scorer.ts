@@ -270,6 +270,30 @@ export async function scoreCombined(params: {
       )
     : new Map<string, ClaudeResult>();
 
+  // 2b. Get distances for PDF-only candidates using Haiku-extracted postcodes
+  const pdfPostcodes: Array<{ index: number; postcode: string }> = [];
+  for (let pi = 0; pi < pdfCandidates.length; pi++) {
+    const csvMatch = matchPdfToCsv(pdfCandidates[pi].name, csvCandidates);
+    if (!csvMatch) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const hData = claudeResults.get(String(pi)) as any;
+      if (hData?.postcode) {
+        pdfPostcodes.push({ index: pi, postcode: hData.postcode });
+      }
+    }
+  }
+  let pdfDistances: Map<number, { drivingMinutes: number | null; transitMinutes: number | null }> = new Map();
+  if (pdfPostcodes.length > 0 && jobPostcode) {
+    try {
+      const pdfDist = await getDistancesBatch(pdfPostcodes.map(p => p.postcode), jobPostcode);
+      pdfPostcodes.forEach((p, i) => {
+        pdfDistances.set(p.index, { drivingMinutes: pdfDist[i]?.drivingMinutes ?? null, transitMinutes: pdfDist[i]?.transitMinutes ?? null });
+      });
+    } catch (e) {
+      console.error("PDF distance lookup failed:", e);
+    }
+  }
+
   // 3. Match PDFs to CSV candidates and build results
   const results: CombinedResult[] = [];
   const matchedCsvIndices = new Set<number>();
@@ -282,15 +306,21 @@ export async function scoreCombined(params: {
 
     const claudeResult = claudeResults.get(String(pi)) || null;
 
-    // Build commute from CSV metadata (if matched)
+    // Build commute from CSV metadata (if matched), or fall back to CV-extracted data
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const haikuData = claudeResult as any;
     const hasLicence = csvMatch
       ? getQualificationAnswer(csvMatch, "driving")?.toLowerCase() === "yes"
-      : false;
+      : haikuData?.hasDriverLicence === true;
     const selfReported = csvMatch
       ? parseMinutes(getQualificationAnswer(csvMatch, "travel") || getQualificationAnswer(csvMatch, "long"))
       : null;
-    const distance = csvIndex >= 0 && distances ? distances[csvIndex] : null;
-    const postcode = csvMatch ? getQualificationAnswer(csvMatch, "postcode") || "" : "";
+    const distance = csvIndex >= 0 && distances
+      ? distances[csvIndex]
+      : pdfDistances.get(pi) || null;
+    const postcode = csvMatch
+      ? getQualificationAnswer(csvMatch, "postcode") || ""
+      : haikuData?.postcode || "";
 
     const drivingMin = distance?.drivingMinutes ?? null;
     const transitMin = distance?.transitMinutes ?? null;
