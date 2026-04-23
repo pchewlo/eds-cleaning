@@ -209,7 +209,8 @@ export async function POST(
 
           // Use existing commute data if new data doesn't have it
           const commuteData = mergedMetadata.commute || {};
-          const hasLic = commuteData.hasDriverLicence || false;
+          const hasLic = commuteData.hasDriverLicence === true || commuteData.hasDriverLicence === "true";
+          console.log("[RECALC]", existing.name, "commute:", JSON.stringify(commuteData).slice(0, 200), "hasLic:", hasLic);
           const commuteMin = hasLic
             ? (commuteData.drivingMinutes ?? commuteData.estimatedMinutes)
             : (commuteData.transitMinutes ?? commuteData.estimatedMinutes);
