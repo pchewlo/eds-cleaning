@@ -52,7 +52,7 @@ export async function POST(
       const text = await extractText(buffer, file.name);
       const base64 = buffer.toString("base64");
       const nameFromFile = file.name
-        .replace(/^Resume/i, "")
+        .replace(/^(Resume|CV)\s*/i, "")
         .replace(/\.(pdf|docx?|txt)$/i, "")
         .replace(/([a-z])([A-Z])/g, "$1 $2")
         .replace(/([A-Z]+)([A-Z][a-z])/g, "$1 $2")
